@@ -59,4 +59,8 @@ obsidian/Inbox/*
 !obsidian/Inbox/.gitkeep
 !obsidian/Learning/
 obsidian/Learning/*
-!obsidian/Learning/.gitkeep
+!obsidian/Learning/ML/
+!obsidian/Learning/English/
+!obsidian/Learning/Uni/
+obsidian/Learning/*/*
+!obsidian/Learning/*/.gitkeep
