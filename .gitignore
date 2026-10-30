@@ -1,0 +1,62 @@
+# Python / uv
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Local config and secrets
+.env
+.env.*
+!.env.example
+
+# Plugin caches
+.mcpb-cache/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local Claude Code settings (paths are machine-specific)
+.claude/
+
+# JS test dependencies
+node_modules/
+
+# Bot data and logs
+telegram-bot/data/
+*.log
+
+# Obsidian vault: an allowlist, so a new folder of notes stays private by default.
+# Only the template of the vault is public; check_privacy.py enforces the same rule.
+obsidian/*
+!obsidian/Dashboard.md
+!obsidian/CLAUDE.md
+!obsidian/Templates/
+!obsidian/.obsidian/
+obsidian/.obsidian/*
+!obsidian/.obsidian/daily-notes.json
+!obsidian/.obsidian/templates.json
+!obsidian/.obsidian/types.json
+!obsidian/Journal/
+obsidian/Journal/*
+!obsidian/Journal/Daily/
+obsidian/Journal/Daily/*
+!obsidian/Journal/Daily/.gitkeep
+!obsidian/Journal/Weekly/
+obsidian/Journal/Weekly/*
+!obsidian/Journal/Weekly/.gitkeep
+!obsidian/Inbox/
+obsidian/Inbox/*
+!obsidian/Inbox/.gitkeep
+!obsidian/Learning/
+obsidian/Learning/*
+!obsidian/Learning/.gitkeep
