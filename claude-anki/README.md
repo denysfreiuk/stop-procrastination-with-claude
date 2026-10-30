@@ -86,9 +86,11 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ### 3. Плагін
 
 ```bash
-claude plugin marketplace add denysfreiuk/anki-claude
+claude plugin marketplace add denysfreiuk/stop-procrastination-with-claude
 claude plugin install ankiclaude@ankiclaude --config root_deck=Study
 ```
+
+Плагін можна поставити окремо, як тут, або разом з усією системою через `setup` ([кореневий README](../README.md)).
 
 `root_deck` — коренева колода, під якою плагін створить свої (`Study::English::EN-UA`, `Study::ML`…).
 Відкрий **новий** чат Claude Code і напиши «перевір з'єднання з Anki». Перший запуск встановлює залежності (~10–30 с).
@@ -101,6 +103,7 @@ claude plugin install ankiclaude@ankiclaude --config root_deck=Study
 | Опція | За замовчуванням | |
 |---|---|---|
 | `root_deck` | — | коренева колода |
+| `env_file` | — | шлях до спільного `.env` системи; значення звідти головніші за решту опцій |
 | `anki_connect_url` | `http://127.0.0.1:8765` | адреса AnkiConnect |
 | `anki_connect_key` | — | якщо в AnkiConnect задано `apiKey` |
 | `explanation_language` | `uk` | мова пояснень у картках |
@@ -187,8 +190,9 @@ defaults write net.ankiweb.dtop NSAppSleepDisabled -bool true
 
 ## Розробка
 
+Шляхи від папки `claude-anki/`; маркетплейс лежить у корені репозиторію (`.claude-plugin/marketplace.json`).
+
 ```
-.claude-plugin/marketplace.json     маркетплейс (корінь репозиторію)
 plugins/ankiclaude/
   .claude-plugin/plugin.json        маніфест, userConfig
   .mcp.json                         MCP-сервер (uv → launch.py)

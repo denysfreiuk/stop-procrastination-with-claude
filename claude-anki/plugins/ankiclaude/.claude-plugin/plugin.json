@@ -1,14 +1,14 @@
 {
   "name": "ankiclaude",
   "displayName": "Anki&Claude",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Створює, редагує та організовує картки Anki за принципами інтервальних повторень, активного пригадування і навчання в контексті (через AnkiConnect).",
   "author": {
     "name": "Denys Freiuk",
     "url": "https://github.com/denysfreiuk"
   },
-  "homepage": "https://github.com/denysfreiuk/anki-claude",
-  "repository": "https://github.com/denysfreiuk/anki-claude",
+  "homepage": "https://github.com/denysfreiuk/stop-procrastination-with-claude",
+  "repository": "https://github.com/denysfreiuk/stop-procrastination-with-claude",
   "license": "MIT",
   "keywords": ["anki", "flashcards", "spaced-repetition", "ankiconnect", "mcp"],
   "userConfig": {
@@ -17,6 +17,11 @@
       "title": "Коренева колода",
       "description": "Колода, під якою плагін створює всі свої колоди, наприклад Den → Den::English::EN-UA.",
       "required": true
+    },
+    "env_file": {
+      "type": "string",
+      "title": "Спільний файл .env",
+      "description": "Шлях до кореневого .env системи stop-procrastination-with-claude. Якщо задано, значення з нього головніші за налаштування нижче. Заповнює setup; якщо ставиш лише плагін, залиш порожнім."
     },
     "anki_connect_url": {
       "type": "string",

@@ -34,6 +34,18 @@ def test_plugin_options_become_our_env_names() -> None:
     assert env["ANKI_AUTO_SYNC"] == "true", "an explicit env value wins"
 
 
+def test_cheap_hook_checks_read_the_shared_env_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import hook
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("ANKI_SOUND_ON_STOP=true\n", encoding="utf-8")
+    monkeypatch.setenv("CLAUDE_PLUGIN_OPTION_SOUND_ON_STOP", "false")
+    assert hook.option("SOUND_ON_STOP", False) is False
+    monkeypatch.setenv("CLAUDE_PLUGIN_OPTION_ENV_FILE", str(env_file))
+    assert hook.option("SOUND_ON_STOP", False) is True
+    assert hook.option("REVIEW_REMINDER", True) is True
+
+
 def test_state_survives_restarts(tmp_path: Path) -> None:
     state = hooks.State(tmp_path / "s.json")
     assert state.due("remind", 60)

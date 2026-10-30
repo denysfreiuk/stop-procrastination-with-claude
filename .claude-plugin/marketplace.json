@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "ankiclaude",
-      "source": "./plugins/ankiclaude",
+      "source": "./claude-anki/plugins/ankiclaude",
       "description": "Створює, редагує та організовує картки Anki за принципами інтервальних повторень, активного пригадування і навчання в контексті.",
       "category": "learning",
       "tags": ["anki", "flashcards", "spaced-repetition", "english", "ankiconnect"]

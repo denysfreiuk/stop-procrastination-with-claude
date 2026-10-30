@@ -24,7 +24,7 @@ jobs:
           - { os: macos-latest, python: "3.14" }
     defaults:
       run:
-        working-directory: plugins/ankiclaude/server
+        working-directory: claude-anki/plugins/ankiclaude/server
     steps:
       - uses: actions/checkout@v7
       # setup-uv publishes only immutable full-version tags (no @v10).
@@ -47,14 +47,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: tests/js
+        working-directory: claude-anki/tests/js
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: tests/js/package-lock.json
+          cache-dependency-path: claude-anki/tests/js/package-lock.json
       - run: npm ci
       - run: npm test
 
@@ -68,5 +68,14 @@ jobs:
           node-version: 24
       - name: claude plugin validate
         run: |
-          npx -y @anthropic-ai/claude-code plugin validate ./plugins/ankiclaude
+          npx -y @anthropic-ai/claude-code plugin validate ./claude-anki/plugins/ankiclaude
           npx -y @anthropic-ai/claude-code plugin validate .
+
+  privacy:
+    name: No personal notes or secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+      - run: uv run --no-project --python 3.14 python setup/check_privacy.py --all
+      - run: uv run --no-project --python 3.14 python -m unittest discover -s setup/tests

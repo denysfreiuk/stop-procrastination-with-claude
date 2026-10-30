@@ -47,13 +47,41 @@ def test_numbers_bools_and_levels_are_validated() -> None:
     assert len(config.warnings) == 2
 
 
-def test_env_file_fills_gaps_but_environment_wins(tmp_path: Path) -> None:
-    env_file = tmp_path / ".env"
+def test_user_env_file_fills_gaps_but_environment_wins(tmp_path: Path) -> None:
+    env_file = tmp_path / "config" / ".env"
+    env_file.parent.mkdir()
     env_file.write_text('# comment\nANKI_ROOT_DECK="FromFile"\nANKI_PROMOTE_AFTER_DAYS=7\n', encoding="utf-8")
-    config = load_config({"ANKI_CLAUDE_ENV_FILE": str(env_file), "ANKI_PROMOTE_AFTER_DAYS": "4"})
+    config = load_config({"ANKI_PROMOTE_AFTER_DAYS": "4"})
     assert config.root_deck == "FromFile"
     assert config.promote_after_days == 4
     assert config.env_file == env_file
+
+
+def test_shared_env_file_wins_over_user_config_and_keeps_it_as_fallback(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("ANKI_ROOT_DECK=FromFile\nANKI_PROMOTE_AFTER_DAYS=\n", encoding="utf-8")
+    config = load_config(
+        {
+            "ANKI_CLAUDE_ENV_FILE": str(env_file),
+            "ANKI_ROOT_DECK": "FromUserConfig",
+            "ANKI_PROMOTE_AFTER_DAYS": "4",
+        }
+    )
+    assert config.root_deck == "FromFile"
+    assert config.promote_after_days == 4, "an empty line in the file does not erase the value"
+    assert config.env_file == env_file
+
+
+def test_missing_shared_env_file_warns_and_falls_back(tmp_path: Path) -> None:
+    config = load_config({"ANKI_CLAUDE_ENV_FILE": str(tmp_path / "gone.env"), "ANKI_ROOT_DECK": "Den"})
+    assert config.root_deck == "Den"
+    assert any("gone.env" in warning for warning in config.warnings)
+
+
+def test_unfilled_env_file_option_counts_as_unset() -> None:
+    config = load_config({"ANKI_CLAUDE_ENV_FILE": "${user_config.env_file}", "ANKI_ROOT_DECK": "Den"})
+    assert config.root_deck == "Den"
+    assert config.env_file is None
 
 
 def test_public_dict_hides_the_key() -> None:

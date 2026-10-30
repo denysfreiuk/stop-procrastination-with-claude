@@ -1,7 +1,9 @@
 """Plugin configuration.
 
 Values come from environment variables (Claude Code fills them from the plugin's
-userConfig), then from an optional .env file, then from defaults.
+userConfig), then from an optional .env file, then from defaults. A file named by
+ANKI_CLAUDE_ENV_FILE is the shared config of the whole system, so it comes first:
+userConfig defaults would otherwise always hide its values.
 """
 
 from __future__ import annotations
@@ -115,12 +117,16 @@ def load_config(environ: Mapping[str, str] | None = None) -> Config:
         except OSError as error:
             warnings.append(f"Не вдалося прочитати {env_file}: {error}")
 
+    sources = (environ, file_values)
+    if _is_set(environ.get("ANKI_CLAUDE_ENV_FILE")):
+        sources = (file_values, environ)
+
     def get(key: str) -> str | None:
-        value = environ.get(key)
-        if _is_set(value):
-            return value.strip()
-        value = file_values.get(key)
-        return value.strip() if _is_set(value) else None
+        for source in sources:
+            value = source.get(key)
+            if _is_set(value):
+                return value.strip()
+        return None
 
     def get_int(key: str, default: int, low: int, high: int) -> int:
         raw = get(key)

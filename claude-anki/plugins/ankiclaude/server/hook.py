@@ -10,8 +10,12 @@ import json
 import os
 import sys
 import time
+from pathlib import Path
 
-from launch import bootstrap, data_dir
+from launch import HERE, bootstrap, data_dir
+
+sys.path.insert(0, str(HERE / "src"))
+from anki_claude.config import parse_env_file  # noqa: E402 (standard library only)
 
 REMIND_EVERY_SECONDS = 3 * 3600
 PROMOTE_EVERY_SECONDS = 3 * 3600
@@ -19,7 +23,14 @@ FALSE = {"false", "0", "no", "ні", "off"}
 
 
 def option(name: str, default: bool) -> bool:
-    value = os.environ.get(f"CLAUDE_PLUGIN_OPTION_{name}", "").strip().lower()
+    value = os.environ.get(f"CLAUDE_PLUGIN_OPTION_{name}", "")
+    env_file = os.environ.get("CLAUDE_PLUGIN_OPTION_ENV_FILE", "").strip()
+    if env_file:
+        try:
+            value = parse_env_file(Path(env_file)).get(f"ANKI_{name}") or value
+        except OSError:
+            pass
+    value = value.strip().lower()
     return default if not value else value not in FALSE
 
 

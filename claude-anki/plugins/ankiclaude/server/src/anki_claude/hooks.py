@@ -27,6 +27,7 @@ REMIND_EVERY_SECONDS = 3 * 3600
 
 # userConfig keys as Claude Code exports them to hooks (CLAUDE_PLUGIN_OPTION_<KEY>) → our env names.
 OPTION_ENV = {
+    "ENV_FILE": "ANKI_CLAUDE_ENV_FILE",
     "ROOT_DECK": "ANKI_ROOT_DECK",
     "ANKI_CONNECT_URL": "ANKI_CONNECT_URL",
     "ANKI_CONNECT_KEY": "ANKI_CONNECT_KEY",
