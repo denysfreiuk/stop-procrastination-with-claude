@@ -1,0 +1,107 @@
+{
+  "name": "ankiclaude",
+  "displayName": "Anki&Claude",
+  "version": "0.4.2",
+  "description": "Створює, редагує та організовує картки Anki за принципами інтервальних повторень, активного пригадування і навчання в контексті (через AnkiConnect).",
+  "author": {
+    "name": "Denys Freiuk",
+    "url": "https://github.com/denysfreiuk"
+  },
+  "homepage": "https://github.com/denysfreiuk/anki-claude",
+  "repository": "https://github.com/denysfreiuk/anki-claude",
+  "license": "MIT",
+  "keywords": ["anki", "flashcards", "spaced-repetition", "ankiconnect", "mcp"],
+  "userConfig": {
+    "root_deck": {
+      "type": "string",
+      "title": "Коренева колода",
+      "description": "Колода, під якою плагін створює всі свої колоди, наприклад Den → Den::English::EN-UA.",
+      "required": true
+    },
+    "anki_connect_url": {
+      "type": "string",
+      "title": "Адреса AnkiConnect",
+      "description": "Адреса add-on AnkiConnect. Змінюй, лише якщо міняв webBindPort у налаштуваннях AnkiConnect.",
+      "default": "http://127.0.0.1:8765"
+    },
+    "anki_connect_key": {
+      "type": "string",
+      "title": "API-ключ AnkiConnect",
+      "description": "Лише якщо в налаштуваннях AnkiConnect задано apiKey. Інакше залиш порожнім.",
+      "sensitive": true
+    },
+    "explanation_language": {
+      "type": "string",
+      "title": "Мова пояснень у картках",
+      "description": "Код мови для пояснень, перекладів і підказок (uk — українська).",
+      "default": "uk"
+    },
+    "english_level": {
+      "type": "string",
+      "title": "Твій рівень англійської",
+      "description": "Від нього залежить, які слова пропонувати і наскільки прості пояснення.",
+      "options": ["A2", "B1", "B2", "C1", "C2"],
+      "default": "B1"
+    },
+    "english_goal": {
+      "type": "string",
+      "title": "Ціль з англійської",
+      "description": "Рівень, до якого рухаєшся: слова цього рівня пріоритетні.",
+      "options": ["B1", "B2", "C1", "C2"],
+      "default": "C1"
+    },
+    "example_level": {
+      "type": "string",
+      "title": "Складність прикладів",
+      "description": "Рівень речень-прикладів у картках зі словами, наприклад B1-B2.",
+      "default": "B1-B2"
+    },
+    "max_cards_per_batch": {
+      "type": "number",
+      "title": "Максимум карток за раз",
+      "description": "Скільки карток генерувати з одного матеріалу, якщо не сказано інакше.",
+      "default": 15,
+      "min": 1,
+      "max": 50
+    },
+    "promote_after_days": {
+      "type": "number",
+      "title": "Поріг розморожування (днів)",
+      "description": "Картка UA→EN вмикається, коли інтервал EN→UA досягне стількох днів; картка форм — коли стільки ж досягне UA→EN.",
+      "default": 3,
+      "min": 1,
+      "max": 60
+    },
+    "auto_sync": {
+      "type": "boolean",
+      "title": "Автоматична синхронізація",
+      "description": "Синхронізувати з AnkiWeb після додавання й редагування карток.",
+      "default": true
+    },
+    "tts": {
+      "type": "boolean",
+      "title": "Озвучка англійських слів",
+      "description": "Кнопка ▶ і автоозвучка слова в картках. На Windows потрібен встановлений голос мови озвучки (див. README, «Усунення проблем»). Якщо Anki пише про помилку TTS — вимкни і запусти ensure_note_types.",
+      "default": true
+    },
+    "tts_lang": {
+      "type": "string",
+      "title": "Мова озвучки",
+      "description": "Американська (en_US) чи британська (en_GB) вимова. Після зміни — ensure_note_types.",
+      "options": ["en_US", "en_GB"],
+      "default": "en_US"
+    },
+    "review_reminder": {
+      "type": "boolean",
+      "title": "Нагадування про повторення",
+      "description": "Показувати, скільки карток чекає на повторення.",
+      "default": true
+    },
+    "sound_on_stop": {
+      "type": "boolean",
+      "title": "Звук після завершення задачі",
+      "description": "Короткий звуковий сигнал, коли Claude закінчив відповідь.",
+      "default": false
+    }
+  }
+}

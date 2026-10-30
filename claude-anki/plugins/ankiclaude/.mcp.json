@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "anki": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--quiet",
+        "--no-project",
+        "--directory",
+        "${CLAUDE_PLUGIN_ROOT}/server",
+        "--python",
+        "3.14",
+        "python",
+        "launch.py"
+      ],
+      "env": {
+        "ANKI_CONNECT_URL": "${user_config.anki_connect_url}",
+        "ANKI_CONNECT_KEY": "${user_config.anki_connect_key}",
+        "ANKI_ROOT_DECK": "${user_config.root_deck}",
+        "ANKI_EXPLANATION_LANGUAGE": "${user_config.explanation_language}",
+        "ANKI_ENGLISH_LEVEL": "${user_config.english_level}",
+        "ANKI_ENGLISH_GOAL": "${user_config.english_goal}",
+        "ANKI_EXAMPLE_LEVEL": "${user_config.example_level}",
+        "ANKI_MAX_CARDS_PER_BATCH": "${user_config.max_cards_per_batch}",
+        "ANKI_PROMOTE_AFTER_DAYS": "${user_config.promote_after_days}",
+        "ANKI_AUTO_SYNC": "${user_config.auto_sync}",
+        "ANKI_TTS": "${user_config.tts}",
+        "ANKI_TTS_LANG": "${user_config.tts_lang}",
+        "ANKI_REVIEW_REMINDER": "${user_config.review_reminder}",
+        "ANKI_SOUND_ON_STOP": "${user_config.sound_on_stop}"
+      }
+    }
+  }
+}

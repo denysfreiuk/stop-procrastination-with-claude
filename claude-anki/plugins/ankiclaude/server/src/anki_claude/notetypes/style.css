@@ -1,0 +1,367 @@
+/* Anki&Claude — shared styling of the AC note types.
+   Managed by the ankiclaude plugin: ensure_note_types overwrites manual edits. */
+
+.card {
+  --ac-fg: #1f2328;
+  --ac-muted: #59636e;
+  --ac-faint: #818b98;
+  --ac-accent: #0969da;
+  --ac-mark: #c4314b;
+  --ac-mark-bg: #ffebef;
+  --ac-soft: #f6f8fa;
+  --ac-border: #d1d9e0;
+  --ac-good: #1a7f37;
+  --ac-good-bg: #dafbe1;
+  --ac-bad: #cf222e;
+  --ac-bad-bg: #ffebe9;
+  --ac-code-keyword: #cf222e;
+  --ac-code-string: #0a3069;
+  --ac-code-number: #0550ae;
+  --ac-code-title: #8250df;
+  --ac-code-comment: #6e7781;
+  --ac-code-builtin: #953800;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", Ubuntu, Arial, sans-serif;
+  font-size: 20px;
+  line-height: 1.5;
+  color: var(--ac-fg);
+  background-color: #ffffff;
+  text-align: left;
+  -webkit-text-size-adjust: 100%;
+}
+
+.card.nightMode,
+.card.night_mode,
+.nightMode .card,
+.night_mode .card {
+  --ac-fg: #e6edf3;
+  --ac-muted: #9aa4af;
+  --ac-faint: #6e7681;
+  --ac-accent: #58a6ff;
+  --ac-mark: #ff8b94;
+  --ac-mark-bg: #3b1d24;
+  --ac-soft: #161b22;
+  --ac-border: #3d444d;
+  --ac-good: #3fb950;
+  --ac-good-bg: #12261e;
+  --ac-bad: #ff7b72;
+  --ac-bad-bg: #2d1416;
+  --ac-code-keyword: #ff7b72;
+  --ac-code-string: #a5d6ff;
+  --ac-code-number: #79c0ff;
+  --ac-code-title: #d2a8ff;
+  --ac-code-comment: #8b949e;
+  --ac-code-builtin: #ffa657;
+  background-color: #0d1117;
+}
+
+.ac {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 20px 20px 8px;
+  box-sizing: border-box;
+}
+
+.ac + .ac {
+  padding-top: 0;
+}
+
+/* Main elements: big. */
+.ac-word,
+.ac-prompt,
+.ac-question,
+.ac-translation,
+.ac-answer-main,
+.ac-sentence,
+.ac-cloze-text {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.ac-word {
+  font-size: 2.1em;
+  line-height: 1.2;
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+.ac-prompt,
+.ac-translation {
+  font-size: 1.55em;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.ac-question,
+.ac-sentence {
+  font-size: 1.3em;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.ac-answer-main {
+  font-size: 1.25em;
+  text-align: center;
+}
+
+.ac-cloze-text {
+  font-size: 1.2em;
+  font-weight: 500;
+}
+
+/* Secondary elements: muted. */
+.ac-ipa,
+.ac-meaning,
+.ac-task,
+.ac-type-label {
+  color: var(--ac-muted);
+  text-align: center;
+}
+
+.ac-ipa {
+  font-family: "Charis SIL", "Doulos SIL", "Noto Sans", "Segoe UI", "Lucida Sans Unicode", sans-serif;
+  margin-top: 4px;
+}
+
+.ac-meaning {
+  margin-top: 6px;
+}
+
+.ac-task,
+.ac-type-label {
+  font-size: 0.8em;
+  margin-top: 14px;
+}
+
+.ac-tts {
+  text-align: center;
+  margin-top: 6px;
+}
+
+.ac-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.ac-meta:empty {
+  display: none;
+}
+
+.ac-chip {
+  font-size: 0.7em;
+  color: var(--ac-muted);
+  border: 1px solid var(--ac-border);
+  border-radius: 999px;
+  padding: 1px 10px;
+}
+
+.ac-example {
+  font-size: 1.1em;
+  text-align: center;
+  margin: 18px auto 0;
+  max-width: 34em;
+}
+
+.ac-examples,
+.ac-hidden {
+  display: none !important;
+}
+
+.ac-hl {
+  color: var(--ac-mark);
+  background: var(--ac-mark-bg);
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 0 0.15em;
+}
+
+.ac-blank {
+  display: inline-block;
+  min-width: 3.2em;
+  border-bottom: 2px solid var(--ac-accent);
+  height: 1em;
+  vertical-align: baseline;
+}
+
+/* Hint behind a spoiler: closed until tapped, so it does not give the word away. */
+.ac-hint {
+  text-align: center;
+  color: var(--ac-muted);
+  font-size: 0.85em;
+  margin-top: 12px;
+}
+
+.ac-hint summary {
+  display: inline-block;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 12px;
+  border: 1px dashed var(--ac-border);
+  border-radius: 999px;
+  font-size: 0.9em;
+  color: var(--ac-faint);
+}
+
+.ac-hint summary::-webkit-details-marker {
+  display: none;
+}
+
+.ac-hint summary::before {
+  content: "▸ ";
+}
+
+.ac-hint[open] summary::before {
+  content: "▾ ";
+}
+
+.ac-hint-text {
+  margin-top: 6px;
+}
+
+.ac-forms {
+  text-align: center;
+  color: var(--ac-muted);
+  margin-top: 8px;
+}
+
+.ac-forms-big {
+  font-size: 1.4em;
+  font-weight: 650;
+  color: var(--ac-fg);
+}
+
+.ac-section {
+  margin-top: 16px;
+  padding: 10px 14px;
+  background: var(--ac-soft);
+  border-radius: 10px;
+  font-size: 0.9em;
+}
+
+.ac-why {
+  border-left: 4px solid var(--ac-accent);
+}
+
+.ac-label {
+  display: block;
+  font-size: 0.72em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ac-faint);
+  margin-bottom: 2px;
+}
+
+.ac-source {
+  margin-top: 18px;
+  font-size: 0.7em;
+  color: var(--ac-faint);
+  text-align: right;
+}
+
+hr#answer {
+  border: none;
+  border-top: 1px solid var(--ac-border);
+  margin: 20px auto 4px;
+  max-width: 680px;
+}
+
+/* Type-in answer (Anki desktop and AnkiDroid). */
+#typeans {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  margin: 8px auto 0;
+  box-sizing: border-box;
+  font: inherit;
+  text-align: center;
+  padding: 8px 12px;
+  color: var(--ac-fg);
+  background: var(--ac-soft);
+  border: 1px solid var(--ac-border);
+  border-radius: 10px;
+}
+
+code#typeans {
+  font-family: ui-monospace, "Cascadia Code", Consolas, Menlo, monospace;
+}
+
+.typeGood {
+  color: var(--ac-good);
+  background: var(--ac-good-bg);
+}
+
+.typeBad {
+  color: var(--ac-bad);
+  background: var(--ac-bad-bg);
+}
+
+.typeMissed {
+  color: var(--ac-muted);
+  background: var(--ac-soft);
+}
+
+/* Cloze. */
+.cloze {
+  color: var(--ac-accent);
+  font-weight: 700;
+}
+
+.cloze-inactive {
+  color: var(--ac-muted);
+}
+
+/* Formula. */
+.ac-formula {
+  font-size: 1.3em;
+  text-align: center;
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+/* Code. */
+pre.ac-code {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  background: var(--ac-soft);
+  border: 1px solid var(--ac-border);
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 0.78em;
+  line-height: 1.45;
+  text-align: left;
+}
+
+pre.ac-code code {
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, Menlo, monospace;
+  white-space: pre;
+  background: none;
+}
+
+.hljs-keyword, .hljs-selector-tag, .hljs-meta .hljs-keyword, .hljs-type { color: var(--ac-code-keyword); }
+.hljs-string, .hljs-regexp, .hljs-meta .hljs-string { color: var(--ac-code-string); }
+.hljs-number, .hljs-literal, .hljs-variable, .hljs-attr, .hljs-attribute { color: var(--ac-code-number); }
+.hljs-title, .hljs-title.function_, .hljs-title.class_, .hljs-section { color: var(--ac-code-title); }
+.hljs-comment, .hljs-quote { color: var(--ac-code-comment); font-style: italic; }
+.hljs-built_in, .hljs-symbol, .hljs-params, .hljs-meta { color: var(--ac-code-builtin); }
+
+@media (max-width: 480px) {
+  .card {
+    font-size: 18px;
+  }
+
+  .ac {
+    padding: 14px 14px 6px;
+  }
+
+  .ac-word {
+    font-size: 1.9em;
+  }
+
+  pre.ac-code {
+    font-size: 0.72em;
+    padding: 10px 12px;
+  }
+}

@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, python: "3.12" }
+          - { os: ubuntu-latest, python: "3.14" }
+          - { os: windows-latest, python: "3.14" }
+          # macOS minutes cost 10x on private repositories: one job is enough.
+          - { os: macos-latest, python: "3.14" }
+    defaults:
+      run:
+        working-directory: plugins/ankiclaude/server
+    steps:
+      - uses: actions/checkout@v7
+      # setup-uv publishes only immutable full-version tags (no @v10).
+      - uses: astral-sh/setup-uv@v10.3.0
+      - name: Tests (fake AnkiConnect, no Anki needed)
+        run: uv run --python ${{ matrix.python }} python -m pytest -q
+      - name: The launcher installs pinned dependencies and imports the server
+        shell: bash
+        env:
+          CLAUDE_PLUGIN_DATA: ${{ runner.temp }}/plugin-data
+        run: uv run --no-project --python ${{ matrix.python }} python -c "import launch; launch.bootstrap(); import anki_claude.server; print('ok')"
+      - name: requirements.lock.txt matches uv.lock
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.14'
+        run: |
+          uv export --no-dev --no-emit-project --no-header --format requirements-txt -o "$RUNNER_TEMP/requirements.txt"
+          diff "$RUNNER_TEMP/requirements.txt" requirements.lock.txt
+
+  templates-js:
+    name: Template scripts (jsdom)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tests/js
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tests/js/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  manifests:
+    name: Plugin and marketplace manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: claude plugin validate
+        run: |
+          npx -y @anthropic-ai/claude-code plugin validate ./plugins/ankiclaude
+          npx -y @anthropic-ai/claude-code plugin validate .

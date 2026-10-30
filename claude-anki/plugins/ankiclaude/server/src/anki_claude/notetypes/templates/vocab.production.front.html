@@ -1,0 +1,13 @@
+{{#Active}}
+<div class="ac ac-vocab ac-production">
+  <div class="ac-prompt">{{TranslationUA}}</div>
+  <div class="ac-meta">{{#PartOfSpeech}}<span class="ac-chip">{{PartOfSpeech}}</span>{{/PartOfSpeech}}{{#Register}}<span class="ac-chip">{{Register}}</span>{{/Register}}</div>
+  <div class="ac-example" data-ac-example="blank" data-ac-key="prod"></div>
+  {{#Hint}}<details class="ac-hint"><summary>[[label:hint]]</summary><div class="ac-hint-text">{{Hint}}</div></details>{{/Hint}}
+  <div class="ac-type-label">[[label:type_lemma]]</div>
+  {{type:Word}}
+  <span class="ac-hidden" data-ac-word>{{Word}}</span>
+  [[ac:examples]]
+</div>
+[[ac:script vocab]]
+{{/Active}}

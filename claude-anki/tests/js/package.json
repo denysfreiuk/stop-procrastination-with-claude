@@ -1,0 +1,12 @@
+{
+  "name": "anki-claude-template-tests",
+  "private": true,
+  "description": "Behaviour tests of the AC note type scripts in a DOM (jsdom).",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.3"
+  }
+}

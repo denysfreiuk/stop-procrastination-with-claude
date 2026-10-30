@@ -1,0 +1,20 @@
+<div id="ac-back"></div>
+<div class="ac ac-vocab ac-production">
+  <div class="ac-prompt">{{TranslationUA}}</div>
+  <div class="ac-meta">{{#PartOfSpeech}}<span class="ac-chip">{{PartOfSpeech}}</span>{{/PartOfSpeech}}{{#Register}}<span class="ac-chip">{{Register}}</span>{{/Register}}</div>
+  <div class="ac-example" data-ac-example="reveal" data-ac-key="prod"></div>
+  {{type:Word}}
+</div>
+<hr id="answer">
+<div class="ac ac-vocab ac-answer">
+  <div class="ac-word">{{Word}}</div>
+  {{#IPA}}<div class="ac-ipa">{{IPA}}</div>{{/IPA}}
+  [[ac:tts Word]]
+  {{#Forms}}<div class="ac-forms">{{Forms}}</div>{{/Forms}}
+  {{#WhyThisWord}}<div class="ac-section ac-why"><span class="ac-label">[[label:why_word]]</span>{{WhyThisWord}}</div>{{/WhyThisWord}}
+  {{#Collocations}}<div class="ac-section"><span class="ac-label">[[label:collocations]]</span>{{Collocations}}</div>{{/Collocations}}
+  {{#Source}}<div class="ac-source">{{Source}}</div>{{/Source}}
+  <span class="ac-hidden" data-ac-word>{{Word}}</span>
+  [[ac:examples]]
+</div>
+[[ac:script vocab]]

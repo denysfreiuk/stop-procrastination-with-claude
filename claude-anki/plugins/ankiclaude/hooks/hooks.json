@@ -1,0 +1,41 @@
+{
+  "description": "Anki&Claude: at session start, releases delayed vocab cards (sync → unsuspend → sync); after replies, an optional sound and a reminder about cards due today.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv",
+            "args": [
+              "run", "--quiet", "--no-project",
+              "--directory", "${CLAUDE_PLUGIN_ROOT}/server",
+              "--python", "3.14",
+              "python", "hook.py", "session-start"
+            ],
+            "timeout": 120,
+            "statusMessage": "Anki&Claude: перевіряю відкладені картки"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv",
+            "args": [
+              "run", "--quiet", "--no-project",
+              "--directory", "${CLAUDE_PLUGIN_ROOT}/server",
+              "--python", "3.14",
+              "python", "hook.py", "stop"
+            ],
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}
