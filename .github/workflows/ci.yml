@@ -42,6 +42,33 @@ jobs:
           uv export --no-dev --no-emit-project --no-header --format requirements-txt -o "$RUNNER_TEMP/requirements.txt"
           diff "$RUNNER_TEMP/requirements.txt" requirements.lock.txt
 
+  bot:
+    name: Bot · Python ${{ matrix.python }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, python: "3.12" }
+          - { os: ubuntu-latest, python: "3.14" }
+          - { os: windows-latest, python: "3.14" }
+          - { os: macos-latest, python: "3.14" }
+    defaults:
+      run:
+        working-directory: telegram-bot
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+      - name: Tests (fake Telegram, temporary vault)
+        run: uv run --python ${{ matrix.python }} python -m pytest -q
+      - name: The launcher installs pinned dependencies and imports the bot
+        run: uv run --no-project --python ${{ matrix.python }} python -c "import launch; launch.bootstrap(); import discipline_bot.bot; print('ok')"
+      - name: requirements.lock.txt matches uv.lock
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.14'
+        run: |
+          uv export --no-dev --no-emit-project --no-header --format requirements-txt -o "$RUNNER_TEMP/requirements.txt"
+          diff "$RUNNER_TEMP/requirements.txt" requirements.lock.txt
+
   templates-js:
     name: Template scripts (jsdom)
     runs-on: ubuntu-latest
