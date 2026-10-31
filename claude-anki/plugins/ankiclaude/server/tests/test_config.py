@@ -84,6 +84,21 @@ def test_unfilled_env_file_option_counts_as_unset() -> None:
     assert config.env_file is None
 
 
+def test_vault_path_is_relative_to_the_shared_env_file(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("VAULT_PATH=obsidian\nTIMEZONE=Europe/Warsaw\n", encoding="utf-8")
+    config = load_config({"ANKI_CLAUDE_ENV_FILE": str(env_file)})
+    assert config.vault_path == tmp_path / "obsidian"
+    assert config.timezone == "Europe/Warsaw"
+    assert config.public_dict()["vault_path"] == str(tmp_path / "obsidian")
+
+
+def test_an_absolute_vault_path_stays_and_a_plugin_alone_has_none(tmp_path: Path) -> None:
+    assert load_config({"VAULT_PATH": str(tmp_path)}).vault_path == tmp_path
+    config = load_config({})
+    assert config.vault_path is None and config.timezone == "Europe/Kyiv"
+
+
 def test_public_dict_hides_the_key() -> None:
     public = load_config({"ANKI_ROOT_DECK": "Den", "ANKI_CONNECT_KEY": "secret"}).public_dict()
     assert "secret" not in str(public)

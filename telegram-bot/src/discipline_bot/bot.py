@@ -12,7 +12,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update
-from telegram.error import TelegramError
+from telegram.error import NetworkError, TelegramError
 from telegram.request import BaseRequest
 from telegram.ext import (
     Application,
@@ -140,7 +140,11 @@ def build_application(config: Config, assistant: Assistant, request: BaseRequest
         await update.effective_message.reply_text("Поки записую лише текст.")
 
     async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-        logger.error("Update failed", exc_info=context.error)
+        # No network is normal for a laptop, and the library keeps retrying by itself.
+        if isinstance(context.error, NetworkError):
+            logger.warning("Telegram is unreachable: %s", context.error)
+        else:
+            logger.error("Update failed", exc_info=context.error)
 
     async def ticker() -> None:
         while True:

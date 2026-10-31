@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 import httpx
 import pytest
 from telegram import Update
+from telegram.error import NetworkError
 from telegram.request import HTTPXRequest
 
 from discipline_bot import bot
@@ -80,7 +81,9 @@ def world(vault: Path, env_file: Path, tmp_path: Path):
 
         asyncio.run(scenario())
 
-    return SimpleNamespace(telegram=telegram, journal=journal, deliver=deliver, assistant=assistant)
+    return SimpleNamespace(
+        telegram=telegram, journal=journal, deliver=deliver, assistant=assistant, application=application
+    )
 
 
 def test_owner_text_lands_in_the_note_in_local_time(world) -> None:
@@ -182,6 +185,19 @@ def test_every_menu_command_is_registered(world) -> None:
     for handler in application.handlers[0]:
         registered |= getattr(handler, "commands", frozenset())
     assert {name for name, _ in bot.COMMANDS} | {"start"} == registered
+
+
+def test_lost_network_is_one_quiet_line(world, caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO):
+        asyncio.run(world.application.process_error(None, NetworkError("no internet")))
+    assert [record.levelname for record in caplog.records] == ["WARNING"]
+    assert caplog.records[0].exc_info is None
+
+
+def test_a_real_failure_keeps_its_traceback(world, caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO):
+        asyncio.run(world.application.process_error(None, ValueError("bug")))
+    assert caplog.records[0].levelname == "ERROR" and caplog.records[0].exc_info
 
 
 def test_the_token_never_reaches_the_log(world, caplog: pytest.LogCaptureFixture) -> None:

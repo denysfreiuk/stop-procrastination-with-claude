@@ -75,6 +75,12 @@ class AnkiActionError(AnkiError):
         self.kind = kind
 
 
+class JournalError(AnkiError):
+    """The Obsidian journal could not be read or changed."""
+
+    code = "journal"
+
+
 class SyncError(AnkiError):
     """Sync did not complete. `reason` is machine-readable."""
 

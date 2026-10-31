@@ -22,6 +22,12 @@
 | `/anki-stats` | коротка статистика і що підтягнути |
 | `/anki-fix <пошук Anki>` | покращення наявних карток за правилами якості |
 | `/anki-promote` | розморожування відкладених карток слів |
+| `/anki-from-notes [дата або період]` | картки зі щоденника Obsidian: «Що вивчив» і «Нові слова» з необроблених днів |
+| `/journal [дата]` | підсумок дня і 1 порада на завтра, дописує їх у нотатку |
+| `/weekly` | тижневий огляд: метрики, закономірності, 1–3 зміни |
+
+Останні три працюють зі щоденником системи, тож їм потрібен `VAULT_PATH` у спільному `.env` ([кореневий README](../README.md)).
+Claude може лише дописати підсумок, поставити `anki_done: true` і створити новий огляд: твої записи він не змінює, а метрики рахує код.
 
 Можна й без команд: «зроби картки з цього конспекту», «додай в Anki слова з цього уривку».
 Прапорці: `--auto` — додати без підтвердження, `--known` — слова вже знайомі (картка UA→EN одразу активна).
@@ -197,10 +203,10 @@ plugins/ankiclaude/
   .claude-plugin/plugin.json        маніфест, userConfig
   .mcp.json                         MCP-сервер (uv → launch.py)
   hooks/hooks.json                  SessionStart (розморожування), Stop (нагадування, звук)
-  skills/                           anki-cards (процес і правила) + 9 slash-команд
+  skills/                           anki-cards (процес і правила) + 12 slash-команд
   server/                           Python MCP-сервер (mcp SDK, MCPServer)
     launch.py                       ставить залежності з requirements.lock.txt у дані плагіна, без venv
-    src/anki_claude/                AnkiConnect-клієнт, колоди, типи нотаток, нотатки, promote, хуки
+    src/anki_claude/                AnkiConnect-клієнт, колоди, типи нотаток, нотатки, promote, хуки, щоденник
     src/anki_claude/notetypes/      шаблони, CSS, JS карток
     tests/                          pytest з фейковим AnkiConnect
 tests/js/                           тести JS шаблонів у jsdom

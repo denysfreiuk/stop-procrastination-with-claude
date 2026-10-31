@@ -16,7 +16,8 @@ from . import __version__
 from .anki import Anki
 from .ankiconnect import AnkiConnect
 from .config import load_config
-from .errors import AnkiError
+from .errors import AnkiError, JournalError
+from .journal import Journal
 from .notes import DuplicateCandidate, NoteIn
 
 T = TypeVar("T")
@@ -25,6 +26,7 @@ INSTRUCTIONS = """\
 Інструменти для карток Anki через AnkiConnect (add-on у desktop-Anki).
 - Якщо інструмент повертає помилку про недоступну Anki — передай користувачу підказку з помилки дослівно.
 - sync сам відкладається, коли користувач повторює картки в desktop-Anki; не обходь це через force=true без його згоди.
+- Щоденник в Obsidian читай через read_journal: метрики в ньому вже пораховані, сам їх не перераховуй.
 """
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
@@ -40,6 +42,15 @@ def build_server(get_anki: Callable[[], Anki]) -> MCPServer:
         try:
             return await call(get_anki())
         except AnkiError as error:
+            raise ToolError(str(error)) from error
+
+    def in_journal(call: Callable[[Journal], T]) -> T:
+        config = get_anki().config
+        if config.vault_path is None:
+            raise ToolError("Не задано шлях до vault. Додай VAULT_PATH у спільний .env або запусти setup.")
+        try:
+            return call(Journal(config.vault_path, config.timezone))
+        except (JournalError, OSError, UnicodeDecodeError) as error:
             raise ToolError(str(error)) from error
 
     @server.tool(annotations=READ_ONLY)
@@ -202,6 +213,43 @@ def build_server(get_anki: Callable[[], Anki]) -> MCPServer:
         синхронізує ще раз. Якщо синхронізація не вдалась — нічого не розморожує. Якщо користувач зараз
         повторює в desktop-Anki — відкладає (force=true лише з його згоди). dry_run — лише показати."""
         return await run(lambda anki: anki.promote(dry_run=dry_run, force=force))
+
+    @server.tool(annotations=READ_ONLY)
+    async def read_journal(
+        date_from: str | None = None,
+        date_to: str | None = None,
+        last_notes: Annotated[int | None, Field(ge=1, le=60)] = None,
+        only_pending_anki: bool = False,
+    ) -> dict[str, Any]:
+        """Читає щоденник Obsidian: Properties і заповнені розділи кожного дня, день тижня, пропущені дні,
+        уже пораховані метрики (totals), тиждень останньої нотатки (week) і чи є на нього огляд, сьогоднішню дату.
+
+        Без аргументів — сьогодні. date_from і date_to (YYYY-MM-DD) — період або один день.
+        last_notes=7 — останні 7 нотаток. only_pending_anki=true — лише дні, де anki_done не true і є
+        «Що вивчив» чи «Нові слова», лише ці розділи (можна обмежити датами)."""
+        return in_journal(lambda journal: journal.read(date_from, date_to, last_notes, only_pending_anki))
+
+    @server.tool(annotations=WRITES)
+    async def add_day_summary(date: str, summary: str) -> dict[str, Any]:
+        """Дописує текст у кінець розділу «Підсумок» щоденної нотатки (YYYY-MM-DD). Нічого не перезаписує.
+        Інших змін у щоденних нотатках цей інструмент не робить."""
+        return in_journal(lambda journal: journal.add_summary(date, summary))
+
+    @server.tool(annotations=WRITES)
+    async def mark_anki_done(dates: list[str]) -> dict[str, Any]:
+        """Ставить anki_done: true у щоденних нотатках (YYYY-MM-DD). Викликай лише для днів,
+        матеріал яких повністю оброблено: картки додано або користувач явно їх відхилив."""
+        return in_journal(lambda journal: journal.mark_anki_done(dates))
+
+    @server.tool(annotations=WRITES)
+    async def save_weekly_review(
+        sections: dict[str, str],
+        last_notes: Annotated[int, Field(ge=1, le=60)] = 7,
+    ) -> dict[str, Any]:
+        """Створює тижневий огляд Journal/Weekly/YYYY-Www.md із шаблону. Метрики в Properties рахує сам
+        за тими самими last_notes, що й read_journal. sections: назва розділу шаблону → текст.
+        Наявний огляд не перезаписує: тоді поверне помилку, передай її користувачу."""
+        return in_journal(lambda journal: journal.save_weekly_review(sections, last_notes))
 
     return server
 

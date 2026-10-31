@@ -12,9 +12,10 @@ async def test_tools_are_registered(fake: FakeAnkiConnect, make_anki) -> None:
     async with Client(build_server(lambda: anki)) as client:
         tools = {tool.name: tool for tool in (await client.list_tools()).tools}
     read_only = {"check_connection", "get_config", "review_status", "list_decks", "list_note_types",
-                 "find_notes", "check_duplicates", "get_leeches", "get_stats"}
+                 "find_notes", "check_duplicates", "get_leeches", "get_stats", "read_journal"}
     writes = {"sync", "setup_decks", "create_deck", "set_deck_options", "ensure_note_types", "add_notes",
-              "update_note_fields", "add_tags", "remove_tags", "delete_notes", "promote_cards"}
+              "update_note_fields", "add_tags", "remove_tags", "delete_notes", "promote_cards",
+              "add_day_summary", "mark_anki_done", "save_weekly_review"}
     assert set(tools) == read_only | writes
     for name in read_only:
         assert tools[name].annotations.read_only_hint is True, name

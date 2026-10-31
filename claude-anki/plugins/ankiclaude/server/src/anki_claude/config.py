@@ -18,6 +18,7 @@ from pathlib import Path
 from .errors import CONFIGURE_HINT
 
 DEFAULT_URL = "http://127.0.0.1:8765"
+DEFAULT_TIMEZONE = "Europe/Kyiv"
 LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
 _TRUE = {"1", "true", "yes", "y", "on", "так"}
 _FALSE = {"0", "false", "no", "n", "off", "ні"}
@@ -39,6 +40,8 @@ class Config:
     tts_lang: str = "en_US"
     review_reminder: bool = True
     sound_on_stop: bool = False
+    vault_path: Path | None = None
+    timezone: str = DEFAULT_TIMEZONE
     env_file: Path | None = None
     warnings: tuple[str, ...] = field(default=())
 
@@ -59,6 +62,8 @@ class Config:
             "tts_lang": self.tts_lang,
             "review_reminder": self.review_reminder,
             "sound_on_stop": self.sound_on_stop,
+            "vault_path": str(self.vault_path) if self.vault_path else None,
+            "timezone": self.timezone,
             "env_file": str(self.env_file) if self.env_file else None,
             "warnings": list(self.warnings),
         }
@@ -179,6 +184,13 @@ def load_config(environ: Mapping[str, str] | None = None) -> Config:
         warnings.append(f"ANKI_CONNECT_URL={url!r} без http://, використовую {DEFAULT_URL}.")
         url = DEFAULT_URL
 
+    vault_path = None
+    vault = get("VAULT_PATH")
+    if vault is not None:
+        vault_path = Path(vault)
+        if not vault_path.is_absolute() and env_file is not None:
+            vault_path = env_file.parent / vault_path
+
     return Config(
         anki_connect_url=url,
         anki_connect_key=get("ANKI_CONNECT_KEY"),
@@ -194,6 +206,8 @@ def load_config(environ: Mapping[str, str] | None = None) -> Config:
         tts_lang=tts_lang,
         review_reminder=get_bool("ANKI_REVIEW_REMINDER", True),
         sound_on_stop=get_bool("ANKI_SOUND_ON_STOP", False),
+        vault_path=vault_path,
+        timezone=get("TIMEZONE") or DEFAULT_TIMEZONE,
         env_file=env_file,
         warnings=tuple(warnings),
     )
