@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from discipline_bot.bot import check
 from discipline_bot.config import ConfigError, load_config, set_env_value
 
 GOOD = "TELEGRAM_BOT_TOKEN=123:abc\nTELEGRAM_USER_ID=42\n"
@@ -49,6 +50,15 @@ def test_values_from_the_file(tmp_path: Path) -> None:
 def test_mistakes_name_the_setting(tmp_path: Path, text: str, expected: str) -> None:
     with pytest.raises(ConfigError, match=expected):
         load_config(write(tmp_path, text))
+
+
+def test_setup_check_reports_the_problem(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setenv("DISCIPLINE_ENV_FILE", str(write(tmp_path, GOOD)))
+    assert check() == 0
+    assert capsys.readouterr().out.strip() == "ok"
+    monkeypatch.setenv("DISCIPLINE_ENV_FILE", str(write(tmp_path, "TELEGRAM_USER_ID=1\n")))
+    assert check() == 1
+    assert "TELEGRAM_BOT_TOKEN" in capsys.readouterr().out
 
 
 def test_missing_file(tmp_path: Path) -> None:

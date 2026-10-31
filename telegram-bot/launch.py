@@ -81,8 +81,10 @@ def main() -> None:
     if sys.stderr is not None:
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     bootstrap()
-    from discipline_bot.bot import main as run
+    from discipline_bot.bot import check, main as run
 
+    if "--check" in sys.argv:
+        raise SystemExit(check())
     run()
 
 

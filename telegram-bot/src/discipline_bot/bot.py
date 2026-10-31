@@ -220,6 +220,18 @@ def configure_logging() -> None:
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
+def check() -> int:
+    """For setup: the dependencies import and the settings make sense."""
+    sys.stdout.reconfigure(encoding="utf-8")
+    try:
+        load_config()
+    except ConfigError as error:
+        print(error)
+        return 1
+    print("ok")
+    return 0
+
+
 def main() -> None:
     configure_logging()
     try:
