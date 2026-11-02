@@ -12,7 +12,10 @@ from discipline_bot.commands import (
     parse_energy,
     parse_hours,
     parse_minutes_and_text,
+    parse_vocabulary,
     parse_words,
+    read_vocabulary_line,
+    vocabulary_line,
 )
 
 
@@ -38,6 +41,33 @@ def test_bad_minutes(args: str) -> None:
 
 def test_words_are_split_trimmed_and_unique() -> None:
     assert parse_words(" borrow, lend;give up\nBorrow,, ") == ["borrow", "lend", "give up"]
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        ("borrow, lend", [("borrow", ""), ("lend", "")]),
+        ("reluctant: She was reluctant to leave", [("reluctant", "She was reluctant to leave")]),
+        ("give up — I won't give up, ever (Friends)", [("give up", "I won't give up, ever (Friends)")]),
+        ("thorough - a thorough check", [("thorough", "a thorough check")]),
+        ("borrow, lend: I borrowed, then lent it", [("borrow", "I borrowed, then lent it"), ("lend", "I borrowed, then lent it")]),
+        ("reluctant: перше\nthorough: друге\nlend", [("reluctant", "перше"), ("thorough", "друге"), ("lend", "")]),
+        ("source https://example.com/x", [("source https://example.com/x", "")]),
+        ("well-known: a well-known fact", [("well-known", "a well-known fact")]),
+        ("Borrow: x\nborrow: x\nborrow", [("Borrow", "x"), ("borrow", "")]),
+        (": лише контекст", []),
+    ],
+)
+def test_vocabulary_with_context(args: str, expected: list[tuple[str, str]]) -> None:
+    assert parse_vocabulary(args) == expected
+
+
+def test_vocabulary_lines_round_trip() -> None:
+    assert vocabulary_line("borrow", "") == "- borrow"
+    assert vocabulary_line("reluctant", "She was reluctant") == "- reluctant — She was reluctant"
+    assert read_vocabulary_line("- reluctant — She was reluctant — really") == ("reluctant", "She was reluctant — really")
+    assert read_vocabulary_line("- borrow") == ("borrow", "")
+    assert read_vocabulary_line("lend") == ("lend", "")
 
 
 @pytest.mark.parametrize(

@@ -19,7 +19,9 @@ from .commands import (
     parse_energy,
     parse_hours,
     parse_minutes_and_text,
-    parse_words,
+    parse_vocabulary,
+    read_vocabulary_line,
+    vocabulary_line,
 )
 from .config import set_env_value
 from .files import atomic_write
@@ -37,6 +39,13 @@ USAGE_GYM = "Приклад: /gym 60 ноги"
 USAGE_SCREEN = "Приклад: /s 95 або /s 1:35"
 USAGE_SLEEP = "Приклад: /sleep 7.5"
 USAGE_ENERGY = "Приклад: /e 4"
+USAGE_WORDS = "Приклад: /w borrow, lend або /w reluctant: She was reluctant to leave"
+WORDS_QUESTION = """Які слова? Через кому: borrow, lend
+
+З контекстом — після двокрапки, де зустрів:
+reluctant: She was reluctant to leave (Friends)
+
+Кожне слово можна писати з нового рядка."""
 
 BUTTON_ROWS = (
     ("🎯 Фокус", "📚 Вивчив", "🔤 Слова"),
@@ -49,6 +58,7 @@ HELP = """Будь-який текст іде в лог дня.
 /f 50 ML — блок фокусу
 /l текст — що вивчив
 /w borrow, lend — нові слова
+/w reluctant: речення, де зустрів — слово з контекстом
 /s 95 — час екрана, хвилини
 /tt — зірвався на тікток
 /sleep 7.5 — сон, години
@@ -247,20 +257,29 @@ class Assistant:
 
     def words(self, args: str, now: datetime) -> Reply:
         if not args.strip():
-            return self._ask(self.words, "Які слова? Через кому: borrow, lend", now)
-        known = {line.removeprefix("- ").strip().lower() for line in self._section(now, WORDS)}
-        fresh = [word for word in parse_words(args) if word.lower() not in known]
+            return self._ask(self.words, WORDS_QUESTION, now)
+        entries = parse_vocabulary(args)
+        if not entries:
+            raise CommandError(f"Не бачу слів. {USAGE_WORDS}")
+        noted = [read_vocabulary_line(line) for line in self._section(now, WORDS)]
+        known = {(word.lower(), context) for word, context in noted}
+        fresh = [(word, context) for word, context in entries if (word.lower(), context) not in known]
         if not fresh:
             return Reply("Ці слова сьогодні вже записані.")
+        # The same word met again in another context is one more example, not one more word.
+        new_words = {word.lower() for word, _ in fresh} - {word.lower() for word, _ in noted}
         edit = Edit(
             now.date(),
-            lines=tuple((WORDS, f"- {word}") for word in fresh),
+            lines=tuple((WORDS, vocabulary_line(word, context)) for word, context in fresh),
             set_values={"anki_done": False},
-            add_values={"new_words": len(fresh)},
+            add_values={"new_words": len(new_words)} if new_words else {},
         )
-        self._write(edit, f"слова: {', '.join(fresh)}", now)
+        self._write(edit, f"слова: {', '.join(dict.fromkeys(word for word, _ in fresh))}", now)
         total = stats.read_day(self.journal.read(now.date())).new_words
-        return Reply(f"✅ +{len(fresh)} (за сьогодні: {total})")
+        with_context = " з контекстом" if any(context for _, context in fresh) else ""
+        if not new_words:
+            return Reply(f"✅ Додав ще один контекст (слів за сьогодні: {total})")
+        return Reply(f"✅ +{len(new_words)}{with_context} (за сьогодні: {total})")
 
     def _section(self, now: datetime, heading: str) -> list[str]:
         return section_lines(self.journal.read(now.date()) or "", heading)

@@ -81,6 +81,41 @@ def test_words_are_counted_and_not_repeated(assistant: Assistant, journal: Journ
     assert "вже записані" in assistant.words("lend", NOW).text
 
 
+def test_words_keep_the_context_they_were_met_in(assistant: Assistant, journal: Journal) -> None:
+    reply = assistant.words("reluctant: She was reluctant to leave (Friends)\nthorough", NOW)
+    assert section(journal, WORDS) == ["- reluctant — She was reluctant to leave (Friends)", "- thorough"]
+    assert values(journal)["new_words"] == "2"
+    assert "з контекстом" in reply.text
+
+
+def test_a_second_context_is_one_more_example_not_one_more_word(assistant: Assistant, journal: Journal) -> None:
+    assistant.words("reluctant", NOW)
+    reply = assistant.words("reluctant: I was reluctant to ask", NOW)
+    assert section(journal, WORDS) == ["- reluctant", "- reluctant — I was reluctant to ask"]
+    assert values(journal)["new_words"] == "1"
+    assert "ще один контекст" in reply.text
+    assert "вже записані" in assistant.words("Reluctant: I was reluctant to ask", NOW).text
+
+
+def test_words_written_by_hand_count_as_known(assistant: Assistant, journal: Journal) -> None:
+    journal.apply(Edit(DAY, ((WORDS, "- borrow — від руки"),)))
+    assistant.words("borrow: інше речення", NOW)
+    assert values(journal)["new_words"] == "0"
+
+
+def test_undo_removes_words_with_context(assistant: Assistant, journal: Journal) -> None:
+    assistant.words("reluctant: She was reluctant\nlend", NOW)
+    assistant.undo("", NOW)
+    assert section(journal, WORDS) == []
+    assert values(journal)["new_words"] == "0"
+
+
+def test_words_without_words_explain_the_format(assistant: Assistant) -> None:
+    with pytest.raises(CommandError, match="reluctant"):
+        assistant.words(": лише контекст", NOW)
+    assert "двокрапки" in assistant.on_text("🔤 Слова", NOW).text
+
+
 def test_screen_and_sleep_overwrite(assistant: Assistant, journal: Journal) -> None:
     assistant.screen("95", NOW)
     assistant.screen("1:40", NOW)
