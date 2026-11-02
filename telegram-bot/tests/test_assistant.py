@@ -62,15 +62,32 @@ def test_focus_button_takes_two_taps(assistant: Assistant, journal: Journal) -> 
     assert values(journal)["focus_minutes"] == "165"
 
 
-def test_learned_and_words_reset_anki_done(assistant: Assistant, journal: Journal) -> None:
+def test_learned_resets_anki_done_and_words_leave_it(assistant: Assistant, journal: Journal) -> None:
     assistant.learned("перше", NOW)
     journal.apply(Edit(DAY, set_values={"anki_done": True}))
     assistant.words("borrow", NOW)
-    assert values(journal)["anki_done"] == "false"
-    journal.apply(Edit(DAY, set_values={"anki_done": True}))
+    assert values(journal)["anki_done"] == "true", "words go to Anki through the study table"
     assistant.learned("друге", NOW)
     assert values(journal)["anki_done"] == "false"
     assert section(journal, LEARNED) == ["- 14:32 перше", "- 14:32 друге"]
+
+
+def test_words_tell_how_many_wait_for_anki(assistant: Assistant, journal: Journal, vault: Path) -> None:
+    journal.apply(Edit(DAY - timedelta(days=1), ((WORDS, "- lend"), (WORDS, "- borrow"))))
+    (vault / "Слова на вивчення.md").write_text(
+        "# Слова на вивчення\n\n## Вчу зараз\n\n## Уже в Anki\n- 2026-10-29 · lend\n", encoding="utf-8"
+    )
+    reply = assistant.words("reluctant: She was reluctant, thorough", NOW)
+    assert reply.text == "📥 +1 з контекстом у черзі на Anki (усього: 2)"
+    reply = assistant.words("give up, put off", NOW)
+    assert reply.text == "📥 +2 у черзі на Anki (усього: 4)"
+    assert "у черзі на Anki: 4" in assistant.words("reluctant: I was reluctant to ask", NOW).text
+
+
+def test_the_reminder_mentions_words_waiting_for_anki(assistant: Assistant) -> None:
+    assistant.words("borrow, lend", NOW)
+    reply = assistant.reminder_due(NOW.replace(hour=20, minute=5))
+    assert "📥 На Anki чекає слів: 2" in reply.text
 
 
 def test_words_are_counted_and_not_repeated(assistant: Assistant, journal: Journal) -> None:

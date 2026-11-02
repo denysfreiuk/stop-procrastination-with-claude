@@ -1,10 +1,14 @@
 """The Obsidian journal: reading daily notes and the few changes Claude's commands make.
 
 Claude can read everything here, but in a daily note it can only append to `## Підсумок`
-and set `anki_done: true`, plus create a new weekly review. So the vault's main rule, that
-the user's entries are never rewritten, holds in code. Metrics are computed here as well,
-not by the model. The Telegram bot has its own copy of the line helpers, because the
-plugin gets installed apart from the repository.
+and set `anki_done: true`, plus create a new weekly review and keep the page of words to
+study. So the vault's main rule, that the user's entries are never rewritten, holds in code.
+Metrics are computed here as well, not by the model. The Telegram bot has its own copy of
+the line helpers, because the plugin gets installed apart from the repository.
+
+Words from `## Нові слова` wait for Anki until they are listed in `## Уже в Anki` of the
+study page. That list lives outside the daily notes on purpose: the bot appends new words
+to the notes on the server, and marking lines next to them would make git conflicts.
 """
 
 from __future__ import annotations
@@ -23,11 +27,24 @@ from .errors import JournalError
 DAILY_FOLDER = Path("Journal") / "Daily"
 WEEKLY_FOLDER = Path("Journal") / "Weekly"
 WEEKLY_TEMPLATE = Path("Templates") / "Weekly.md"
+STUDY_PAGE = Path("Слова на вивчення.md")
 
 LEARNED = "Що вивчив"
 WORDS = "Нові слова"
 SUMMARY = "Підсумок"
-ANKI_SECTIONS = (LEARNED, WORDS)
+ANKI_SECTIONS = (LEARNED,)
+STUDYING = "Вчу зараз"
+IN_ANKI = "Уже в Anki"
+NOTE_CONTEXT = " — "
+STUDY_PAGE_TEXT = """# Слова на вивчення
+
+Таблицю складає /anki-from-notes зі слів, записаних через /w. Вивчи її, а наступний запуск /anki-from-notes
+(чи «готово» в тій самій розмові) додасть ці слова в Anki. Сторінку веде Claude: руками її краще не правити.
+
+## Вчу зараз
+
+## Уже в Anki
+"""
 
 WEEKDAYS = ("пн", "вт", "ср", "чт", "пт", "сб", "нд")
 WEEKLY_PROPERTIES = (
@@ -39,6 +56,7 @@ KEY_LINE = re.compile(r"^([A-Za-z_][\w-]*):[ \t]*(.*?)[ \t]*$")
 LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+\.)\s+\S")
 TOP_HEADING = re.compile(r"^#{1,2}\s")
 NOTE_NAME = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
+IN_ANKI_LINE = re.compile(r"^- (\d{4}-\d{2}-\d{2}) · (.+?)\s*$")
 FENCE = "```"
 WRITE_TRIES = 5
 REPLACE_TRIES = 7
@@ -148,10 +166,22 @@ def replace_section(text: str, heading: str, body: str) -> str:
     """Only for a review being created: the template's placeholders are not the user's text."""
     lines = text.split("\n")
     span = _section_span(lines, heading)
-    content = body.strip().split("\n")
+    content = body.strip().split("\n") if body.strip() else []
     if span is None:
         return append_lines(text, heading, content)
     return "\n".join([*lines[: span[0] + 1], *content, "", *lines[span[1] :]])
+
+
+def vocabulary_entry(line: str) -> tuple[str, str]:
+    """The word and its context from a line of «Нові слова», written by the bot or by hand."""
+    word, _, context = line.strip().removeprefix("- ").partition(NOTE_CONTEXT)
+    return word.strip(), context.strip()
+
+
+def words_in_anki(page: str) -> set[tuple[str, str]]:
+    """(day, word in lower case) of every word the study page lists as already in Anki."""
+    lines = sections(page).get(IN_ANKI, [])
+    return {(match[1], match[2].lower()) for line in lines if (match := IN_ANKI_LINE.match(line.strip()))}
 
 
 def parse_date(value: str) -> date:
@@ -342,6 +372,67 @@ class Journal:
             self._update(path, lambda text: set_property(text, "anki_done", "true"))
             marked.append(day.isoformat())
         return {"marked": marked, "missing": missing}
+
+    def study_page(self) -> Path:
+        return self.vault / STUDY_PAGE
+
+    def _study_text(self) -> str:
+        path = self.study_page()
+        return self._read(path) if path.is_file() else ""
+
+    def word_queue(self) -> dict[str, Any]:
+        """Words written down for Anki and not in it yet, oldest first, and the table being studied now."""
+        page = self._study_text()
+        done = words_in_anki(page)
+        queue: dict[tuple[str, str], dict[str, Any]] = {}
+        for day in self._note_days():
+            for line in sections(self._read(self.note_path(day))).get(WORDS, []):
+                word, context = vocabulary_entry(line)
+                key = (day.isoformat(), word.lower())
+                if not word or key in done:
+                    continue
+                entry = queue.setdefault(key, {"date": day.isoformat(), "word": word, "contexts": []})
+                if context and context not in entry["contexts"]:
+                    entry["contexts"].append(context)
+        return {
+            "words": list(queue.values()),
+            "study_table": "\n".join(sections(page).get(STUDYING, [])),
+            "study_page": str(self.study_page()),
+        }
+
+    def _change_study_page(self, change: Callable[[str], str]) -> Path:
+        path = self.study_page()
+        if not path.is_file():
+            _atomic_write(path, STUDY_PAGE_TEXT.encode("utf-8"))
+        self._update(path, change)
+        return path
+
+    def save_study_table(self, table: str) -> dict[str, Any]:
+        if not table.strip():
+            raise JournalError("Порожня таблиця.")
+        path = self._change_study_page(lambda text: replace_section(text, STUDYING, table))
+        return {"path": str(path)}
+
+    def mark_words_in_anki(self, words: Iterable[tuple[str, str]], clear_study_table: bool = True) -> dict[str, Any]:
+        """List words as already in Anki, so they leave the queue; by default the studied table goes too."""
+        done = words_in_anki(self._study_text())
+        new_lines: list[str] = []
+        for day_text, raw_word in words:
+            day = parse_date(day_text).isoformat()
+            word = " ".join(raw_word.split())
+            if not word:
+                raise JournalError("Порожнє слово.")
+            if (day, word.lower()) not in done:
+                done.add((day, word.lower()))
+                new_lines.append(f"- {day} · {word}")
+
+        def change(text: str) -> str:
+            if new_lines:
+                text = append_lines(text, IN_ANKI, new_lines)
+            return replace_section(text, STUDYING, "") if clear_study_table else text
+
+        path = self._change_study_page(change)
+        return {"path": str(path), "marked": len(new_lines), "left_in_queue": len(self.word_queue()["words"])}
 
     def save_weekly_review(self, review_sections: dict[str, str], last_notes: int = 7) -> dict[str, Any]:
         report = self.read(last_notes=last_notes)

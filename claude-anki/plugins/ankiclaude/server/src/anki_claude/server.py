@@ -10,7 +10,7 @@ from typing import Annotated, Any, TypeVar
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from . import __version__
 from .anki import Anki
@@ -28,6 +28,11 @@ INSTRUCTIONS = """\
 - sync сам відкладається, коли користувач повторює картки в desktop-Anki; не обходь це через force=true без його згоди.
 - Щоденник в Obsidian читай через read_journal: метрики в ньому вже пораховані, сам їх не перераховуй.
 """
+
+class JournalWord(BaseModel):
+    date: str = Field(description="день щоденної нотатки зі словом, YYYY-MM-DD")
+    word: str
+
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 WRITES = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
@@ -226,8 +231,30 @@ def build_server(get_anki: Callable[[], Anki]) -> MCPServer:
 
         Без аргументів — сьогодні. date_from і date_to (YYYY-MM-DD) — період або один день.
         last_notes=7 — останні 7 нотаток. only_pending_anki=true — лише дні, де anki_done не true і є
-        «Що вивчив» чи «Нові слова», лише ці розділи (можна обмежити датами)."""
+        «Що вивчив», лише цей розділ (можна обмежити датами). Слова для Anki — у read_word_queue."""
         return in_journal(lambda journal: journal.read(date_from, date_to, last_notes, only_pending_anki))
+
+    @server.tool(annotations=READ_ONLY)
+    async def read_word_queue() -> dict[str, Any]:
+        """Черга слів на Anki: усе з «Нові слова» щоденника, чого ще немає в списку «Уже в Anki» сторінки
+        «Слова на вивчення». words — найдавніші першими: день, слово, контексти, де користувач його зустрів.
+        study_table — таблиця, яку користувач зараз вчить (порожня, якщо її немає)."""
+        return in_journal(lambda journal: journal.word_queue())
+
+    @server.tool(annotations=WRITES)
+    async def save_study_table(table: str) -> dict[str, Any]:
+        """Записує markdown-таблицю слів для вивчення в розділ «Вчу зараз» сторінки «Слова на вивчення»
+        (створює сторінку, якщо її немає) замість попередньої таблиці. Щоденних нотаток не змінює."""
+        return in_journal(lambda journal: journal.save_study_table(table))
+
+    @server.tool(annotations=WRITES)
+    async def mark_words_in_anki(words: list[JournalWord], clear_study_table: bool = True) -> dict[str, Any]:
+        """Дописує слова (день із read_word_queue і слово) у список «Уже в Anki», і вони виходять із черги.
+        Викликай для слів, які додано в Anki, які там уже були або від яких користувач явно відмовився.
+        clear_study_table=true ще й очищає «Вчу зараз». Щоденних нотаток не змінює."""
+        return in_journal(lambda journal: journal.mark_words_in_anki(
+            ((item.date, item.word) for item in words), clear_study_table
+        ))
 
     @server.tool(annotations=WRITES)
     async def add_day_summary(date: str, summary: str) -> dict[str, Any]:

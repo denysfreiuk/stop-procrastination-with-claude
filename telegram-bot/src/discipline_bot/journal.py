@@ -16,6 +16,7 @@ from .markdown import append_line, properties, remove_line, render_value, sectio
 
 DAILY_FOLDER = Path("Journal") / "Daily"
 TEMPLATE = Path("Templates") / "Daily.md"
+STUDY_PAGE = Path("Слова на вивчення.md")
 
 FOCUS = "Фокус"
 LEARNED = "Що вивчив"
@@ -34,6 +35,7 @@ _QUOTED_VARIABLE = re.compile(r'"(\{\{[^{}]*\}\})"')
 _VARIABLE = re.compile(r"\{\{\s*(date|time|title)\s*(?::([^{}]*))?\}\}")
 _MOMENT_TOKEN = re.compile("YYYY|MM|DD|HH|mm|ss")
 _MOMENT = {"YYYY": "%Y", "MM": "%m", "DD": "%d", "HH": "%H", "mm": "%M", "ss": "%S"}
+_NOTE_NAME = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class JournalBusy(Exception):
@@ -114,10 +116,24 @@ class Journal:
         return self.vault / DAILY_FOLDER / f"{day.isoformat()}.md"
 
     def read(self, day: date) -> str | None:
+        return self._read(self.note_path(day))
+
+    @staticmethod
+    def _read(path: Path) -> str | None:
         try:
-            return self.note_path(day).read_bytes().decode("utf-8").replace("\r\n", "\n")
+            return path.read_bytes().decode("utf-8").replace("\r\n", "\n")
         except FileNotFoundError:
             return None
+
+    def days(self) -> list[date]:
+        """Days that have a note, oldest first."""
+        folder = self.vault / DAILY_FOLDER
+        names = (path.stem for path in folder.glob("*.md")) if folder.is_dir() else ()
+        return sorted(date.fromisoformat(name) for name in names if _NOTE_NAME.match(name))
+
+    def read_study_page(self) -> str:
+        """The page Claude keeps: the table of words being studied and the words already in Anki."""
+        return self._read(self.vault / STUDY_PAGE) or ""
 
     def _create(self, day: date, now: datetime) -> None:
         path = self.note_path(day)

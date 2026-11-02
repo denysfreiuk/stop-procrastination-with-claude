@@ -40,7 +40,7 @@ USAGE_SCREEN = "Приклад: /s 95 або /s 1:35"
 USAGE_SLEEP = "Приклад: /sleep 7.5"
 USAGE_ENERGY = "Приклад: /e 4"
 USAGE_WORDS = "Приклад: /w borrow, lend або /w reluctant: She was reluctant to leave"
-WORDS_QUESTION = """Які слова? Через кому: borrow, lend
+WORDS_QUESTION = """Які слова в Anki? Через кому: borrow, lend
 
 З контекстом — після двокрапки, де зустрів:
 reluctant: She was reluctant to leave (Friends)
@@ -57,8 +57,9 @@ HELP = """Будь-який текст іде в лог дня.
 
 /f 50 ML — блок фокусу
 /l текст — що вивчив
-/w borrow, lend — нові слова
+/w borrow, lend — слова в чергу на Anki
 /w reluctant: речення, де зустрів — слово з контекстом
+(ввечері /anki-from-notes у Claude Code дасть таблицю для вивчення)
 /s 95 — час екрана, хвилини
 /tt — зірвався на тікток
 /sleep 7.5 — сон, години
@@ -268,18 +269,21 @@ class Assistant:
             return Reply("Ці слова сьогодні вже записані.")
         # The same word met again in another context is one more example, not one more word.
         new_words = {word.lower() for word, _ in fresh} - {word.lower() for word, _ in noted}
+        # Words go to Anki through /anki-from-notes' study table, so anki_done stays as it is.
         edit = Edit(
             now.date(),
             lines=tuple((WORDS, vocabulary_line(word, context)) for word, context in fresh),
-            set_values={"anki_done": False},
             add_values={"new_words": len(new_words)} if new_words else {},
         )
         self._write(edit, f"слова: {', '.join(dict.fromkeys(word for word, _ in fresh))}", now)
-        total = stats.read_day(self.journal.read(now.date())).new_words
+        waiting = self.words_for_anki()
         with_context = " з контекстом" if any(context for _, context in fresh) else ""
         if not new_words:
-            return Reply(f"✅ Додав ще один контекст (слів за сьогодні: {total})")
-        return Reply(f"✅ +{len(new_words)}{with_context} (за сьогодні: {total})")
+            return Reply(f"✅ Додав ще один контекст (у черзі на Anki: {waiting})")
+        return Reply(f"📥 +{len(new_words)}{with_context} у черзі на Anki (усього: {waiting})")
+
+    def words_for_anki(self) -> int:
+        return stats.words_for_anki(self.journal.days(), self.journal.read, self.journal.read_study_page())
 
     def _section(self, now: datetime, heading: str) -> list[str]:
         return section_lines(self.journal.read(now.date()) or "", heading)
@@ -380,7 +384,7 @@ class Assistant:
         """Checked regularly, so a reminder missed in sleep mode comes right after waking up."""
         if now.time() < self.reminder_time or self.state.reminder_sent == now.date().isoformat():
             return None
-        return Reply(stats.reminder(self.journal.read(now.date()), now.date()))
+        return Reply(stats.reminder(self.journal.read(now.date()), now.date(), self.words_for_anki()))
 
     def mark_reminder_sent(self, now: datetime) -> None:
         self.state.reminder_sent = now.date().isoformat()

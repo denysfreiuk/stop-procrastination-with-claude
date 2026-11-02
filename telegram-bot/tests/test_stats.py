@@ -84,3 +84,16 @@ def test_reminder_when_everything_is_filled() -> None:
         "## Що вивчив\n- x\n\n## Нові слова\n- y\n\n## Їжа\n- z\n"
     )
     assert stats.reminder(note_text, DAY).endswith("Усе заповнено 👍")
+    with_words = stats.reminder(note_text, DAY, words_for_anki=3)
+    assert with_words.endswith("📥 На Anki чекає слів: 3. У Claude Code: /anki-from-notes")
+
+
+def test_words_for_anki_skip_the_ones_the_study_page_lists() -> None:
+    read = reader({
+        0: "## Нові слова\n- borrow\n- reluctant — Friends\n- reluctant — I was reluctant\n",
+        1: "## Нові слова\n- Borrow\n- lend\n",
+    })
+    page = "# Слова на вивчення\n\n## Вчу зараз\n| lend | |\n\n## Уже в Anki\n- 2026-10-29 · borrow\n"
+    days = [DAY - timedelta(days=1), DAY]
+    assert stats.words_for_anki(days, read, page) == 3, "lend, borrow and reluctant of today"
+    assert stats.words_for_anki(days, read, "") == 4

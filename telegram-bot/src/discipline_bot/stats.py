@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from .commands import read_vocabulary_line
 from .journal import FOOD, LEARNED, WORDS, to_number
 from .markdown import list_items, properties, section_lines
 
@@ -13,6 +15,8 @@ MONTHS = (
     "січня", "лютого", "березня", "квітня", "травня", "червня",
     "липня", "серпня", "вересня", "жовтня", "листопада", "грудня",
 )
+IN_ANKI = "Уже в Anki"
+_IN_ANKI_LINE = re.compile(r"^- (\d{4}-\d{2}-\d{2}) · (.+?)\s*$")
 ReadNote = Callable[[date], "str | None"]
 
 
@@ -99,12 +103,33 @@ def summary(text: str | None, day: date) -> str:
     return "\n".join(lines)
 
 
-def reminder(text: str | None, day: date) -> str:
+def reminder(text: str | None, day: date, words_for_anki: int = 0) -> str:
     parsed = read_day(text)
     lines = ["🌙 Час заповнити день.", *filled(parsed)]
     gaps = missing(parsed)
     lines.append(f"Ще немає: {', '.join(gaps)}" if gaps else "Усе заповнено 👍")
+    if words_for_anki:
+        lines.append(f"📥 На Anki чекає слів: {words_for_anki}. У Claude Code: /anki-from-notes")
     return "\n".join(lines)
+
+
+def words_for_anki(days: Iterable[date], read: ReadNote, study_page: str) -> int:
+    """Words written down for Anki that the study page does not list as already there.
+
+    The plugin's word_queue counts the same way: one word a day, whatever the contexts.
+    """
+    done = {
+        (match[1], match[2].lower())
+        for line in section_lines(study_page, IN_ANKI)
+        if (match := _IN_ANKI_LINE.match(line.strip()))
+    }
+    waiting = set()
+    for day in days:
+        for line in section_lines(read(day) or "", WORDS):
+            word, _ = read_vocabulary_line(line)
+            if word and (day.isoformat(), word.lower()) not in done:
+                waiting.add((day.isoformat(), word.lower()))
+    return len(waiting)
 
 
 def studied(text: str) -> bool:

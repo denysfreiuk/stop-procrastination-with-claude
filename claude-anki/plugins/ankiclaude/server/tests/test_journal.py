@@ -139,16 +139,66 @@ def test_totals_of_nothing_have_no_averages(journal: Journal) -> None:
 
 
 def test_pending_anki_shows_only_unprocessed_material(journal: Journal, vault: Path) -> None:
-    write_note(vault, TODAY, vocabulary="- borrow", focus="- 10:00 · 5 хв · ML")
+    write_note(vault, TODAY, learned="- 11:00 SVD", vocabulary="- borrow", focus="- 10:00 · 5 хв · ML")
     write_note(vault, TODAY - timedelta(days=1), learned="- 10:00 PCA", anki="true")
-    write_note(vault, TODAY - timedelta(days=2))
+    write_note(vault, TODAY - timedelta(days=2), vocabulary="- lend")
     write_note(vault, TODAY - timedelta(days=30), learned="- 10:00 давнє")
     report = journal.read(only_pending_anki=True)
     assert [day["date"] for day in report["days"]] == ["2026-09-30", "2026-10-30"]
-    assert report["days"][1]["sections"] == {"Нові слова": ["- borrow"]}
+    assert report["days"][1]["sections"] == {"Що вивчив": ["- 11:00 SVD"]}, "words go through the word queue"
     assert report["missing_days"] == []
     limited = journal.read("2026-10-01", "2026-10-30", only_pending_anki=True)
     assert [day["date"] for day in limited["days"]] == ["2026-10-30"]
+
+
+def test_word_queue_gathers_words_of_all_days_with_their_contexts(journal: Journal, vault: Path) -> None:
+    write_note(vault, TODAY, vocabulary="- reluctant — She was reluctant to leave\n- borrow\n- reluctant — Friends")
+    write_note(vault, TODAY - timedelta(days=40), vocabulary="- lend", anki="true")
+    queue = journal.word_queue()
+    assert queue["words"] == [
+        {"date": "2026-09-20", "word": "lend", "contexts": []},
+        {"date": "2026-10-30", "word": "reluctant", "contexts": ["She was reluctant to leave", "Friends"]},
+        {"date": "2026-10-30", "word": "borrow", "contexts": []},
+    ]
+    assert queue["study_table"] == ""
+    assert not (vault / "Слова на вивчення.md").exists()
+
+
+def test_studied_words_leave_the_queue_and_the_notes_stay_untouched(journal: Journal, vault: Path) -> None:
+    path = write_note(vault, TODAY, vocabulary="- reluctant — Friends\n- borrow\n- lend")
+    note = path.read_text(encoding="utf-8")
+    table = "| Слово | Переклад |\n|---|---|\n| reluctant | неохочий |\n| borrow | позичати |"
+    journal.save_study_table(table)
+    assert journal.word_queue()["study_table"] == table
+    result = journal.mark_words_in_anki([("2026-10-30", "Reluctant"), ("2026-10-30", "borrow")])
+    assert result["marked"] == 2 and result["left_in_queue"] == 1
+    queue = journal.word_queue()
+    assert [item["word"] for item in queue["words"]] == ["lend"]
+    assert queue["study_table"] == ""
+    assert path.read_text(encoding="utf-8") == note
+    page = sections((vault / "Слова на вивчення.md").read_text(encoding="utf-8"))
+    assert page["Уже в Anki"] == ["- 2026-10-30 · Reluctant", "- 2026-10-30 · borrow"]
+    assert journal.mark_words_in_anki([("2026-10-30", "borrow")])["marked"] == 0
+
+
+def test_the_same_word_on_a_new_day_waits_for_anki_again(journal: Journal, vault: Path) -> None:
+    write_note(vault, TODAY - timedelta(days=1), vocabulary="- borrow")
+    journal.mark_words_in_anki([("2026-10-29", "borrow")])
+    write_note(vault, TODAY, vocabulary="- borrow — I borrowed a pen")
+    assert journal.word_queue()["words"] == [{"date": "2026-10-30", "word": "borrow", "contexts": ["I borrowed a pen"]}]
+
+
+def test_a_new_table_replaces_the_old_one_and_the_list_stays(journal: Journal, vault: Path) -> None:
+    write_note(vault, TODAY, vocabulary="- borrow\n- lend")
+    journal.mark_words_in_anki([("2026-10-30", "borrow")], clear_study_table=False)
+    journal.save_study_table("| lend | позичати |")
+    journal.save_study_table("| lend | давати в борг |")
+    page = sections((vault / "Слова на вивчення.md").read_text(encoding="utf-8"))
+    assert page == {"Вчу зараз": ["| lend | давати в борг |"], "Уже в Anki": ["- 2026-10-30 · borrow"]}
+    with pytest.raises(JournalError, match="Порожня"):
+        journal.save_study_table(" ")
+    with pytest.raises(JournalError, match="YYYY-MM-DD"):
+        journal.mark_words_in_anki([("вчора", "lend")])
 
 
 def test_bad_date_is_explained(journal: Journal) -> None:
@@ -307,14 +357,19 @@ async def test_tools_explain_a_missing_vault(fake: FakeAnkiConnect, make_anki) -
 
 async def test_tools_read_and_write_the_vault(fake: FakeAnkiConnect, make_anki, vault: Path) -> None:
     today = datetime.now(ZoneInfo("Europe/Kyiv")).date()
-    path = write_note(vault, today, learned="- 10:00 PCA")
+    path = write_note(vault, today, learned="- 10:00 PCA", vocabulary="- borrow")
     anki = make_anki(fake, VAULT_PATH=str(vault))
     async with Client(build_server(lambda: anki)) as client:
         report = await client.call_tool("read_journal", {"only_pending_anki": True})
         await client.call_tool("add_day_summary", {"date": today.isoformat(), "summary": "Добрий день."})
         await client.call_tool("mark_anki_done", {"dates": [today.isoformat()]})
         review = await client.call_tool("save_weekly_review", {"sections": {"Що вийшло": "Усе."}})
+        queue = await client.call_tool("read_word_queue")
+        await client.call_tool("save_study_table", {"table": "| borrow | позичати |"})
+        marked = await client.call_tool("mark_words_in_anki", {"words": [{"date": today.isoformat(), "word": "borrow"}]})
     assert report.structured_content["days"][0]["sections"] == {"Що вивчив": ["- 10:00 PCA"]}
     assert review.is_error is False
     text = path.read_text(encoding="utf-8")
     assert "Добрий день." in text and "anki_done: true" in text
+    assert [item["word"] for item in queue.structured_content["words"]] == ["borrow"]
+    assert marked.structured_content["marked"] == 1 and marked.structured_content["left_in_queue"] == 0
