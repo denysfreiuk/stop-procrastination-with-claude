@@ -159,7 +159,7 @@ class Commands(unittest.TestCase):
         with mock.patch("builtins.input", return_value="ні"), mock.patch.object(setup, "say"), mock.patch.object(
             autostart, "uninstall"
         ) as removed:
-            self.assertEqual(setup.uninstall(SimpleNamespace(yes=False)), 0)
+            self.assertEqual(setup.uninstall(SimpleNamespace(yes=False, bot_only=False)), 0)
         removed.assert_not_called()
 
     def test_anki_being_closed_is_not_a_failure(self) -> None:
@@ -204,6 +204,8 @@ class Autostart(unittest.TestCase):
         unit = autostart.systemd_unit(autostart.bot_command("/bin/uv", self.BOT), self.BOT)
         self.assertIn(f"--directory '{self.BOT}'", unit)
         self.assertIn("Restart=always", unit)
+        self.assertIn("MemoryMax=300M", unit)
+        self.assertIn("CPUQuota=50%", unit)
         self.assertIn("WantedBy=default.target", unit)
 
     @unittest.skipUnless(shutil.which("systemd-analyze"), "needs systemd")
@@ -221,6 +223,113 @@ class Autostart(unittest.TestCase):
             autostart.mac_private_folder(home / "Library" / "Mobile Documents" / "x", home), "Library/Mobile Documents"
         )
         self.assertIsNone(autostart.mac_private_folder(home / "discipline", home))
+
+
+def git(folder: Path, *args: str) -> str:
+    command = ["git", "-C", str(folder), "-c", "user.name=t", "-c", "user.email=t@t", *args]
+    return subprocess.run(command, check=True, capture_output=True, text=True, encoding="utf-8").stdout
+
+
+class Server(unittest.TestCase):
+    def setUp(self) -> None:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name)
+        self.app = self.root / "app"
+        self.app.mkdir()
+        self.env = self.app / ".env"
+        self.env.write_text("VAULT_PATH=../vault\n", encoding="utf-8")
+        template = self.root / "template"
+        for name in ("Templates/Daily.md", "Dashboard.md", ".obsidian/types.json", "Journal/Daily/.gitkeep",
+                     "Journal/Daily/2026-10-30.md", "Inbox/ідея.md", ".obsidian/workspace.json"):
+            (template / name).parent.mkdir(parents=True, exist_ok=True)
+            (template / name).write_text("x", encoding="utf-8")
+        for name, value in (("ENV_FILE", self.env), ("VAULT_TEMPLATE", template)):
+            patcher = mock.patch.object(setup, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        patcher = mock.patch.object(setup, "say")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_new_vault_gets_the_template_and_no_personal_notes(self) -> None:
+        vault = setup.prepare_vault({"VAULT_PATH": "../vault"}, server=False)
+        files = sorted(path.relative_to(vault).as_posix() for path in vault.rglob("*") if path.is_file())
+        self.assertEqual(files, [".obsidian/types.json", "Dashboard.md", "Journal/Daily/.gitkeep", "Templates/Daily.md"])
+
+    def test_an_existing_vault_is_not_filled_in(self) -> None:
+        (self.root / "vault").mkdir()
+        vault = setup.prepare_vault({"VAULT_PATH": "../vault"}, server=False)
+        self.assertEqual(list(vault.iterdir()), [])
+
+    @unittest.skipUnless(shutil.which("git"), "needs git")
+    def test_a_server_vault_accepts_pushes_and_starts_with_one_commit(self) -> None:
+        vault = setup.prepare_vault({"VAULT_PATH": "../vault"}, server=True)
+        self.assertEqual(git(vault, "config", "receive.denyCurrentBranch").strip(), "updateInstead")
+        self.assertEqual(git(vault, "log", "--format=%s").strip(), "Початковий vault")
+        self.assertIn(".obsidian/workspace*.json", (vault / ".gitignore").read_text(encoding="utf-8"))
+        self.assertEqual(git(vault, "status", "--porcelain"), "")
+
+    @unittest.skipUnless(shutil.which("git"), "needs git")
+    def test_an_empty_server_vault_waits_for_the_first_push(self) -> None:
+        (self.root / "vault").mkdir()
+        vault = setup.prepare_vault({"VAULT_PATH": "../vault"}, server=True)
+        laptop = self.root / "laptop"
+        laptop.mkdir()
+        git(laptop, "init", "-q", "-b", "main")
+        (laptop / "note.md").write_text("моя нотатка", encoding="utf-8")
+        git(laptop, "add", "-A")
+        git(laptop, "commit", "-q", "-m", "мої нотатки")
+        git(laptop, "push", "-q", str(vault), "main")
+        self.assertEqual((vault / "note.md").read_text(encoding="utf-8"), "моя нотатка")
+
+    def test_add_device_restricts_the_key_to_the_vault(self) -> None:
+        (self.root / "vault").mkdir()
+        home = self.root / "home"
+        key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample phone"
+        with mock.patch.object(setup.Path, "home", return_value=home):
+            self.assertEqual(setup.add_device(SimpleNamespace(key=key.split())), 0)
+            self.assertEqual(setup.add_device(SimpleNamespace(key=key.split())), 0)
+            self.assertEqual(setup.add_device(SimpleNamespace(key=["not", "a", "key"])), 1)
+        lines = (home / ".ssh" / "authorized_keys").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 1)
+        vault = (self.root / "vault").resolve()
+        self.assertEqual(lines[0], f"command=\"'{setup.GIT_ONLY}' '{vault}'\",restrict {key}")
+
+    def test_bot_only_uninstall_keeps_the_plugin_and_remembers(self) -> None:
+        with mock.patch.object(setup, "ENV_EXAMPLE", setup.ROOT / ".env.example"), mock.patch.object(
+            autostart, "uninstall", return_value=True
+        ), mock.patch.object(setup.shutil, "which") as which:
+            self.assertEqual(setup.uninstall(SimpleNamespace(yes=True, bot_only=True)), 0)
+        which.assert_not_called()
+        self.assertEqual(setup.read_env(self.env.read_text(encoding="utf-8"))["RUN_BOT"], "false")
+
+
+@unittest.skipIf(sys.platform == "win32" or not shutil.which("git-shell"), "the forced command runs on Linux servers")
+class GitOnly(unittest.TestCase):
+    def setUp(self) -> None:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.vault = Path(folder.name) / "vault"
+        self.vault.mkdir()
+        git(self.vault, "init", "-q", "-b", "main")
+        (Path(folder.name) / "other").mkdir()
+        self.other = Path(folder.name) / "other"
+
+    def ssh(self, command: str) -> subprocess.CompletedProcess[str]:
+        env = {"PATH": "/usr/bin:/bin", "SSH_ORIGINAL_COMMAND": command}
+        return subprocess.run(["sh", str(setup.GIT_ONLY), str(self.vault)], env=env, input="", capture_output=True,
+                              text=True, timeout=20)
+
+    def test_git_on_the_vault_is_allowed(self) -> None:
+        self.assertEqual(self.ssh(f"git-upload-pack '{self.vault}'").returncode, 0)
+        self.assertEqual(self.ssh(f"git-upload-pack '{self.vault}/'").returncode, 0)
+
+    def test_everything_else_is_refused(self) -> None:
+        for command in ("bash", "ls /", f"git-upload-pack '{self.other}'", f"git-upload-pack '{self.vault}/../other'",
+                        f"git-upload-pack '{self.vault}'; rm -rf /tmp/x", ""):
+            result = self.ssh(command)
+            self.assertNotEqual(result.returncode, 0, command)
 
 
 if __name__ == "__main__":

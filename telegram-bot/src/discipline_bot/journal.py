@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import re
+import subprocess
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -24,6 +27,9 @@ NOTE = "Нотатка дня"
 LOG = "Лог"
 
 WRITE_TRIES = 5
+COMMIT_TRIES = 3
+GIT_IDENTITY = ("-c", "user.name=discipline-bot", "-c", "user.email=bot@localhost")
+logger = logging.getLogger("discipline_bot")
 _QUOTED_VARIABLE = re.compile(r'"(\{\{[^{}]*\}\})"')
 _VARIABLE = re.compile(r"\{\{\s*(date|time|title)\s*(?::([^{}]*))?\}\}")
 _MOMENT_TOKEN = re.compile("YYYY|MM|DD|HH|mm|ss")
@@ -72,8 +78,37 @@ def to_number(value: str | None) -> float:
 
 
 class Journal:
-    def __init__(self, vault: Path) -> None:
+    def __init__(self, vault: Path, commit: bool = False) -> None:
         self.vault = vault
+        self.commit_changes = commit
+
+    def _git(self, *args: str) -> subprocess.CompletedProcess[str]:
+        command = ["git", "-C", str(self.vault), *args]
+        return subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+    def _commit(self, message: str) -> None:
+        """On a server the vault is the git repository other devices sync with.
+
+        Each change is committed at once, so the working tree stays clean and pushes
+        from the other devices (receive.denyCurrentBranch=updateInstead) go through.
+        A failed commit never fails the write: the next commit picks the change up.
+        """
+        if not self.commit_changes:
+            return
+        try:
+            for _ in range(COMMIT_TRIES):
+                result = self._git("add", "--all")
+                if result.returncode == 0:
+                    if self._git("diff", "--cached", "--quiet").returncode == 0:
+                        return
+                    result = self._git(*GIT_IDENTITY, "commit", "--quiet", "--message", message or "Запис бота")
+                    if result.returncode == 0:
+                        return
+                time.sleep(0.2)  # Most often a push from another device holds the index for a moment.
+        except OSError as error:
+            logger.warning("Could not run git in the vault: %s", error)
+            return
+        logger.warning("Could not commit the vault: %s", result.stderr.strip())
 
     def note_path(self, day: date) -> Path:
         return self.vault / DAILY_FOLDER / f"{day.isoformat()}.md"
@@ -99,7 +134,7 @@ class Journal:
         except FileExistsError:
             pass
 
-    def _update(self, day: date, change: Callable[[str], str]) -> None:
+    def _update(self, day: date, change: Callable[[str], str], message: str = "") -> None:
         """Change a note, starting over if someone else wrote it between reading and writing."""
         path = self.note_path(day)
         if not path.exists():
@@ -116,6 +151,7 @@ class Journal:
             after = path.stat()
             if (after.st_mtime_ns, after.st_size) == (before.st_mtime_ns, before.st_size):
                 atomic_write(path, data)
+                self._commit(message)
                 return
         raise JournalBusy(str(path))
 
@@ -136,7 +172,7 @@ class Journal:
                 text = append_line(text, section, line)
             return text
 
-        self._update(edit.day, change)
+        self._update(edit.day, change, f"Бот: {label}" if label else "")
         return Undo(edit.day.isoformat(), edit.lines, previous, label)
 
     def revert(self, undo: Undo) -> None:
@@ -147,7 +183,7 @@ class Journal:
                 text = set_property(text, key, value or "")
             return text
 
-        self._update(date.fromisoformat(undo.day), change)
+        self._update(date.fromisoformat(undo.day), change, f"Бот: скасовано {undo.label}".rstrip())
 
     def restore_if_lost(self, edit: Edit) -> bool:
         """Put an edit back if Obsidian saved its own older copy over it while the user typed."""
@@ -161,5 +197,5 @@ class Journal:
             return False
         whole_edit_lost = bool(edit.lines) and len(missing) == len(edit.lines)
         add_values = edit.add_values if whole_edit_lost else {}
-        self.apply(Edit(edit.day, missing, wrong, add_values))
+        self.apply(Edit(edit.day, missing, wrong, add_values), "відновлено втрачений запис")
         return True

@@ -29,6 +29,7 @@ class Config:
     reminder_time: time
     vault: Path
     env_file: Path
+    vault_git_commit: bool = False
 
 
 def env_file_path() -> Path:
@@ -79,7 +80,8 @@ def load_config(path: Path | None = None) -> Config:
     if not vault.is_dir():
         raise ConfigError(f"Не знайдено vault: {vault}. Перевір VAULT_PATH у {path}.")
 
-    return Config(token, int(user_id), timezone, reminder_time, vault, path)
+    commit = values.get("VAULT_GIT_COMMIT", "").lower() in {"1", "true", "yes", "так"}
+    return Config(token, int(user_id), timezone, reminder_time, vault, path, commit)
 
 
 def set_env_value(path: Path, key: str, value: str) -> None:

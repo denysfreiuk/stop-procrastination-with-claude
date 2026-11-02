@@ -26,6 +26,11 @@ def test_defaults_and_relative_vault(tmp_path: Path) -> None:
     assert config.vault == tmp_path / "obsidian"
 
 
+def test_commits_are_off_unless_asked(tmp_path: Path) -> None:
+    assert load_config(write(tmp_path, GOOD)).vault_git_commit is False
+    assert load_config(write(tmp_path, GOOD + "VAULT_GIT_COMMIT=true\n")).vault_git_commit is True
+
+
 def test_values_from_the_file(tmp_path: Path) -> None:
     other = tmp_path / "other"
     other.mkdir()

@@ -101,6 +101,9 @@ ExecStart={shlex.join(command)}
 WorkingDirectory={bot_dir}
 Restart=always
 RestartSec={RESTART_SECONDS}
+# On a server the bot shares the machine with other services: it may never take much.
+MemoryMax=300M
+CPUQuota=50%
 
 [Install]
 WantedBy=default.target

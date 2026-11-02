@@ -239,7 +239,8 @@ def main() -> None:
     except ConfigError as error:
         logger.error("%s", error)
         raise SystemExit(1) from None
-    assistant = Assistant(Journal(config.vault), State(DATA / "state.json"), config.reminder_time, config.env_file)
+    journal = Journal(config.vault, commit=config.vault_git_commit)
+    assistant = Assistant(journal, State(DATA / "state.json"), config.reminder_time, config.env_file)
     application = build_application(config, assistant)
     logger.info("Bot started")
     # Waiting updates are kept on purpose: they are what arrived while the computer was off.

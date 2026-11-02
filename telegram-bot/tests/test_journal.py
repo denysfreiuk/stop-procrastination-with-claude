@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from datetime import date, datetime
 from pathlib import Path
 
@@ -201,6 +202,59 @@ def test_a_note_deleted_by_the_user_is_not_brought_back(journal: Journal) -> Non
     journal.note_path(DAY).unlink()
     assert journal.restore_if_lost(FOCUS_EDIT) is False
     assert journal.read(DAY) is None
+
+
+def git(folder: Path, *args: str) -> str:
+    command = ["git", "-C", str(folder), "-c", "user.name=t", "-c", "user.email=t@t", *args]
+    return subprocess.run(command, check=True, capture_output=True, text=True, encoding="utf-8").stdout
+
+
+@pytest.fixture
+def server_vault(vault: Path) -> Path:
+    """The vault on a server: a repository that phones and laptops push to."""
+    git(vault, "init", "-q", "-b", "main")
+    git(vault, "config", "receive.denyCurrentBranch", "updateInstead")
+    git(vault, "add", "--all")
+    git(vault, "commit", "-q", "-m", "start")
+    return vault
+
+
+def test_each_write_is_committed_on_the_server(server_vault: Path) -> None:
+    journal = Journal(server_vault, commit=True)
+    undo = journal.apply(FOCUS_EDIT, "фокус 50 хв · ML")
+    journal.revert(undo)
+    assert git(server_vault, "log", "--format=%s", "-2").split("\n")[:2] == ["Бот: скасовано фокус 50 хв · ML", "Бот: фокус 50 хв · ML"]
+    assert git(server_vault, "status", "--porcelain") == ""
+
+
+def test_without_commits_the_repository_is_left_alone(server_vault: Path) -> None:
+    Journal(server_vault).apply(FOCUS_EDIT, "фокус")
+    assert git(server_vault, "log", "--format=%s").strip() == "start"
+
+
+def test_a_phone_and_the_bot_work_on_the_same_vault(server_vault: Path, tmp_path: Path) -> None:
+    journal = Journal(server_vault, commit=True)
+    phone = tmp_path / "phone"
+    git(tmp_path, "clone", "-q", str(server_vault), str(phone))
+
+    journal.apply(FOCUS_EDIT, "фокус")
+    git(phone, "pull", "-q", "--no-rebase")
+    note = phone / "Journal" / "Daily" / "2026-10-30.md"
+    note.write_text(note.read_text(encoding="utf-8").replace("## Нотатка дня\n", "## Нотатка дня\nз телефона\n"), encoding="utf-8")
+    git(phone, "commit", "-q", "-am", "з телефона")
+    git(phone, "push", "-q")
+
+    assert section_lines(journal.read(DAY), NOTE) == ["з телефона"]
+    journal.apply(Edit(DAY, ((LOG, "- 15:00 після телефона"),)), "лог")
+    git(phone, "pull", "-q", "--no-rebase")
+    text = note.read_text(encoding="utf-8")
+    assert "з телефона" in text and "- 15:00 після телефона" in text and "- 14:32 · 50 хв · ML" in text
+
+
+def test_a_failed_commit_never_loses_the_write(vault: Path, caplog: pytest.LogCaptureFixture) -> None:
+    Journal(vault, commit=True).apply(FOCUS_EDIT, "фокус")  # Not a repository at all.
+    assert section_lines(Journal(vault).read(DAY), FOCUS) == ["- 14:32 · 50 хв · ML"]
+    assert "Could not commit" in caplog.text
 
 
 def test_atomic_write_leaves_no_temporary_files(tmp_path: Path) -> None:

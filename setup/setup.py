@@ -27,11 +27,23 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import autostart  # noqa: E402
+import check_privacy  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / ".env"
 ENV_EXAMPLE = ROOT / ".env.example"
 BOT_DIR = ROOT / "telegram-bot"
+VAULT_TEMPLATE = ROOT / "obsidian"
+GIT_ONLY = ROOT / "setup" / "vault-git-only.sh"
+SERVER_VAULT = "../vault"
+VAULT_GITIGNORE = """# Per-device state of Obsidian and temporary files
+.obsidian/workspace*.json
+.trash/
+.*.tmp
+.DS_Store
+"""
+SSH_KEY = re.compile(r"^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp\d+|sk-ssh-ed25519@openssh\.com) [A-Za-z0-9+/=]+( .*)?$")
+GIT_IDENTITY = ["-c", "user.name=discipline-setup", "-c", "user.email=setup@localhost"]
 PLUGIN_SERVER = ROOT / "claude-anki" / "plugins" / "ankiclaude" / "server"
 MARKETPLACE = "ankiclaude"
 PLUGIN = "ankiclaude@ankiclaude"
@@ -131,14 +143,16 @@ def ask(question: Question, current: str, read: Callable[[str], str] = input) ->
         say(f"  {question.hint}")
 
 
-def configure(answer_questions: bool) -> dict[str, str]:
+def configure(answer_questions: bool, questions: tuple[Question, ...] = QUESTIONS,
+              forced: Mapping[str, str] | None = None) -> dict[str, str]:
     """Create or update .env, and keep what is already there when Enter is pressed."""
     example = ENV_EXAMPLE.read_text(encoding="utf-8")
     text = ENV_FILE.read_text(encoding="utf-8") if ENV_FILE.is_file() else example
-    values = read_env(text)
+    text, _ = add_missing_settings(text, example)
+    values = {**read_env(text), **(forced or {})}
     if answer_questions:
         say("Натисни Enter, щоб лишити значення в дужках.")
-        for question in QUESTIONS:
+        for question in questions:
             while True:
                 values[question.key] = ask(question, values.get(question.key, ""))
                 if question.key != "TELEGRAM_BOT_TOKEN":
@@ -171,7 +185,70 @@ def claude_config_dir() -> Path:
     return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
 
 
-def install_dependencies(uv: str) -> bool:
+def vault_path(values: Mapping[str, str]) -> Path:
+    path = Path(values.get("VAULT_PATH") or "obsidian")
+    return path if path.is_absolute() else ENV_FILE.parent / path
+
+
+def template_files() -> list[Path]:
+    """The public part of the vault template, never the notes kept in this folder."""
+    return [
+        path for path in sorted(VAULT_TEMPLATE.rglob("*"))
+        if path.is_file() and check_privacy.path_problem(f"obsidian/{path.relative_to(VAULT_TEMPLATE).as_posix()}") is None
+    ]
+
+
+def create_vault(vault: Path) -> None:
+    for source in template_files():
+        target = vault / source.relative_to(VAULT_TEMPLATE)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+
+
+def git_in(folder: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    return run(["git", "-C", str(folder), *args], check=check)
+
+
+def share_vault(vault: Path) -> None:
+    """Make the server's vault a repository the other devices push to.
+
+    updateInstead lets a push update the files the bot works with, as long as they
+    have no uncommitted changes, and the bot commits each of its writes at once.
+    """
+    if not (vault / ".git").exists():
+        git_in(vault, "init", "--quiet", "--initial-branch=main")
+    git_in(vault, "config", "receive.denyCurrentBranch", "updateInstead")
+    ignore = vault / ".gitignore"
+    if not ignore.exists():
+        ignore.write_text(VAULT_GITIGNORE, encoding="utf-8", newline="\n")
+    has_commits = git_in(vault, "rev-parse", "--verify", "--quiet", "HEAD", check=False).returncode == 0
+    has_notes = any(path.name not in {".git", ".gitignore"} for path in vault.iterdir())
+    # An empty repository stays empty: the first push from a laptop brings its own history.
+    if not has_commits and has_notes:
+        git_in(vault, "add", "--all")
+        git_in(vault, *GIT_IDENTITY, "commit", "--quiet", "--message", "Початковий vault")
+
+
+def prepare_vault(values: Mapping[str, str], server: bool) -> Path:
+    """A new vault outside the repository starts from the template; an existing one is never filled in."""
+    vault = vault_path(values)
+    inside_repository = vault.resolve() == VAULT_TEMPLATE.resolve()
+    if not inside_repository and not vault.exists():
+        create_vault(vault)
+        say(f"  ✓ Створено vault із шаблону: {vault.resolve()}")
+    vault.mkdir(parents=True, exist_ok=True)
+    if server:
+        share_vault(vault)
+        say("  ✓ Vault — git-репозиторій, з яким синхронізуються ноут і телефони")
+    return vault
+
+
+def linger_enabled(user: str) -> bool:
+    result = run(["loginctl", "show-user", user, "--property=Linger"], check=False)
+    return "Linger=yes" in result.stdout
+
+
+def install_dependencies(uv: str, plugin: bool = True) -> bool:
     """Install what the bot and the plugin's server need, and check the bot's settings."""
     python = [uv, "run", "--quiet", "--no-project", "--python", "3.14"]
     result = run([*python, "--directory", str(BOT_DIR), "python", "launch.py", "--check"], check=False)
@@ -179,6 +256,8 @@ def install_dependencies(uv: str) -> bool:
         say(f"  ✗ Бот: {(result.stdout or result.stderr).strip()}")
         return False
     say("  ✓ Бот готовий")
+    if not plugin:
+        return True
     plugin_data = claude_config_dir() / "plugins" / "data" / "ankiclaude-ankiclaude"
     result = run(
         [*python, "--directory", str(PLUGIN_SERVER), "python", "-c", "import launch; launch.bootstrap()"],
@@ -251,13 +330,17 @@ def checklist(bot_ready: bool) -> None:
 
 
 def install(args: argparse.Namespace) -> int:
+    if args.server:
+        return install_server(args)
     say("1/5 Налаштування")
     values = configure(answer_questions=not args.yes)
     enable_commit_check()
 
     say("2/5 Залежності")
+    prepare_vault(values, server=False)
     uv = find_uv()
     ready = install_dependencies(uv)
+    run_bot = values.get("RUN_BOT", "true").lower() != "false"
 
     say("3/5 Плагін Claude Code")
     claude = shutil.which("claude")
@@ -272,6 +355,8 @@ def install(args: argparse.Namespace) -> int:
     say("4/5 Автозапуск бота")
     if args.no_autostart:
         say("  – Пропущено")
+    elif not run_bot:
+        say("  – Бот працює на сервері (RUN_BOT=false), тут його не запускаю")
     elif not ready:
         say("  ! Пропущено: спершу виправ помилку вище і запусти setup ще раз.")
     else:
@@ -282,8 +367,65 @@ def install(args: argparse.Namespace) -> int:
 
     say("5/5 Anki")
     check_anki(values)
-    checklist(ready and not args.no_autostart)
+    checklist(ready and run_bot and not args.no_autostart)
     return 0 if ready else 1
+
+
+def install_server(args: argparse.Namespace) -> int:
+    """The bot on an always-on Linux server; laptops and phones sync the vault with it over SSH."""
+    say("1/4 Налаштування")
+    current = read_env(ENV_FILE.read_text(encoding="utf-8")) if ENV_FILE.is_file() else {}
+    forced = {"VAULT_GIT_COMMIT": "true", "RUN_BOT": "true"}
+    if current.get("VAULT_PATH", "obsidian") == "obsidian":
+        forced["VAULT_PATH"] = SERVER_VAULT
+    values = configure(answer_questions=not args.yes, questions=QUESTIONS[:4], forced=forced)
+
+    say("2/4 Vault")
+    vault = prepare_vault(values, server=True)
+
+    say("3/4 Залежності")
+    uv = find_uv()
+    ready = install_dependencies(uv, plugin=False)
+
+    say("4/4 Автозапуск бота")
+    if args.no_autostart:
+        say("  – Пропущено")
+    elif not ready:
+        say("  ! Пропущено: спершу виправ помилку вище і запусти setup ще раз.")
+    else:
+        autostart.install(uv, BOT_DIR)
+        say("  ✓ Бот запущено як сервіс systemd із лімітами пам'яті й процесора")
+        user = os.environ.get("USER", "")
+        if user and not linger_enabled(user):
+            say("  ! Щоб бот працював і тоді, коли ти не залогінений, виконай один раз:")
+            say(f"      sudo loginctl enable-linger {user}")
+
+    say()
+    say("Адреса vault для ноута й телефонів:")
+    say(f"  ssh://{os.environ.get('USER', 'user')}@<адреса сервера>{vault.resolve()}")
+    say("Ключ телефона додає: uv run --python 3.14 setup/setup.py add-device \"ssh-ed25519 AAAA… phone\"")
+    return 0 if ready else 1
+
+
+def add_device(args: argparse.Namespace) -> int:
+    """Let a phone's SSH key sync the vault and nothing else: no shell, no other repositories."""
+    key = " ".join(args.key).strip()
+    if not SSH_KEY.match(key):
+        say("Це не схоже на публічний SSH-ключ. Він починається з ssh-ed25519, ssh-rsa або ecdsa-sha2-….")
+        return 1
+    vault = vault_path(read_env(ENV_FILE.read_text(encoding="utf-8"))).resolve()
+    keys = Path.home() / ".ssh" / "authorized_keys"
+    existing = keys.read_text(encoding="utf-8") if keys.exists() else ""
+    if key.split()[1] in existing:
+        say("Цей ключ уже додано.")
+        return 0
+    keys.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    line = f"command=\"'{GIT_ONLY}' '{vault}'\",restrict {key}\n"
+    with keys.open("a", encoding="utf-8", newline="\n") as file:
+        file.write(("\n" if existing and not existing.endswith("\n") else "") + line)
+    keys.chmod(0o600)
+    say(f"✓ Пристрій додано. З цим ключем доступний лише git-репозиторій {vault}")
+    return 0
 
 
 def update(args: argparse.Namespace) -> int:
@@ -308,21 +450,29 @@ def update(args: argparse.Namespace) -> int:
         say(f"✓ Нові налаштування в .env: {', '.join(added)}")
     values = read_env(text)
     enable_commit_check()
-    ready = install_dependencies(find_uv())
+    server = values.get("VAULT_GIT_COMMIT", "").lower() == "true"
+    ready = install_dependencies(find_uv(), plugin=not server)
     claude = shutil.which("claude")
-    if claude:
+    if claude and not server:
         install_plugin(claude, values)
         say("✓ Плагін оновлено. Нові команди з'являться в новому чаті.")
-    if ready and autostart.restart():
+    if ready and values.get("RUN_BOT", "true").lower() != "false" and autostart.restart():
         say("✓ Бота перезапущено")
     return 0 if ready else 1
 
 
 def uninstall(args: argparse.Namespace) -> int:
-    if not args.yes and input("Прибрати автозапуск бота і плагін? [т/Н]: ").strip().lower() not in {"т", "так", "y", "yes"}:
+    what = "автозапуск бота" if args.bot_only else "автозапуск бота і плагін"
+    if not args.yes and input(f"Прибрати {what}? [т/Н]: ").strip().lower() not in {"т", "так", "y", "yes"}:
         say("Нічого не змінено.")
         return 0
     say("✓ Автозапуск прибрано, бота зупинено" if autostart.uninstall() else "– Автозапуску не було")
+    if args.bot_only:
+        if ENV_FILE.is_file():
+            text, _ = add_missing_settings(ENV_FILE.read_text(encoding="utf-8"), ENV_EXAMPLE.read_text(encoding="utf-8"))
+            write_env(set_env_values(text, {"RUN_BOT": "false"}))
+            say("✓ RUN_BOT=false: setup більше не запускатиме бота на цьому комп'ютері")
+        return 0
     claude = shutil.which("claude")
     if claude and any(item["name"] == MARKETPLACE for item in claude_json(claude, "marketplace", "list")):
         run([claude, "plugin", "marketplace", "remove", MARKETPLACE])
@@ -335,14 +485,18 @@ def main(argv: list[str] | None = None) -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description="Встановлення системи Stop Procrastination.")
-    parser.add_argument("command", nargs="?", choices=("install", "update", "uninstall"), default="install")
+    parser.add_argument("command", nargs="?", choices=("install", "update", "uninstall", "add-device"), default="install")
+    parser.add_argument("key", nargs="*", help="для add-device: публічний SSH-ключ пристрою")
     parser.add_argument("--yes", action="store_true", help="нічого не питати: брати значення з .env")
+    parser.add_argument("--server", action="store_true", help="встановити бота на сервер, з яким синхронізуються пристрої")
     parser.add_argument("--no-plugin", action="store_true", help="не чіпати плагін Claude Code")
     parser.add_argument("--no-autostart", action="store_true", help="не налаштовувати автозапуск бота")
+    parser.add_argument("--bot-only", action="store_true", help="для uninstall: прибрати лише бота, плагін лишити")
     parser.add_argument("--after-pull", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    commands = {"install": install, "update": update, "uninstall": uninstall, "add-device": add_device}
     try:
-        return {"install": install, "update": update, "uninstall": uninstall}[args.command](args)
+        return commands[args.command](args)
     except subprocess.CalledProcessError as error:
         say(f"Команда не вдалась: {' '.join(map(str, error.cmd[:4]))}\n{(error.stderr or error.stdout or '').strip()}")
         return 1
