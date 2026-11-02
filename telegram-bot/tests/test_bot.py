@@ -17,7 +17,7 @@ from telegram.error import NetworkError
 from telegram.request import HTTPXRequest
 
 from discipline_bot import bot
-from discipline_bot.assistant import Assistant, State
+from discipline_bot.assistant import Assistant, DashboardUpdate, State
 from discipline_bot.config import Config
 from discipline_bot.journal import FOCUS, LOG, Journal
 from discipline_bot.markdown import section_lines
@@ -34,13 +34,19 @@ MESSAGE_TIME = int(datetime(2026, 10, 30, 12, 32, tzinfo=UTC).timestamp())
 class FakeTelegram:
     def __init__(self) -> None:
         self.sent: list[dict] = []
+        self.calls: list[dict] = []
+        self.deleted: set[str] = set()  # message ids the user removed
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         method = request.url.path.rsplit("/", 1)[-1]
+        fields = dict(httpx.QueryParams(request.content.decode()))
+        self.calls.append({"method": method, **fields})
         if method == "getMe":
             result: object = {"id": 1, "is_bot": True, "first_name": "Bot", "username": "test_bot"}
+        elif method == "editMessageText" and fields.get("message_id") in self.deleted:
+            error = {"ok": False, "error_code": 400, "description": "Bad Request: message to edit not found"}
+            return httpx.Response(400, json=error)
         elif method in {"sendMessage", "editMessageText"}:
-            fields = dict(httpx.QueryParams(request.content.decode()))
             if "reply_markup" in fields:
                 fields["reply_markup"] = json.loads(fields["reply_markup"])
             self.sent.append({"method": method, **fields})
@@ -185,6 +191,45 @@ def test_every_menu_command_is_registered(world) -> None:
     for handler in application.handlers[0]:
         registered |= getattr(handler, "commands", frozenset())
     assert {name for name, _ in bot.COMMANDS} | {"start"} == registered
+
+
+def dashboard_calls(world, *updates: DashboardUpdate) -> list[tuple[str, str]]:
+    async def scenario() -> None:
+        await world.application.initialize()
+        for update in updates:
+            await bot.show_dashboard(world.application.bot, OWNER, update, world.assistant)
+        await world.application.shutdown()
+
+    asyncio.run(scenario())
+    return [(call["method"], call.get("message_id", "")) for call in world.telegram.calls if call["method"] != "getMe"]
+
+
+def test_a_new_dashboard_is_sent_quietly_and_pinned(world) -> None:
+    calls = dashboard_calls(world, DashboardUpdate("📵✅", None))
+    assert calls == [("sendMessage", ""), ("pinChatMessage", "2")]
+    assert world.telegram.calls[1]["disable_notification"] == "true"
+    assert (world.assistant.state.dashboard_message, world.assistant.state.dashboard_text) == (2, "📵✅")
+
+
+def test_the_dashboard_is_edited_in_place(world) -> None:
+    calls = dashboard_calls(world, DashboardUpdate("новий текст", 7))
+    assert calls == [("editMessageText", "7")]
+    assert world.assistant.state.dashboard_message == 7
+
+
+def test_a_deleted_dashboard_comes_back_pinned(world) -> None:
+    world.telegram.deleted.add("7")
+    calls = dashboard_calls(world, DashboardUpdate("текст", 7))
+    assert calls == [("editMessageText", "7"), ("sendMessage", ""), ("unpinChatMessage", "7"), ("pinChatMessage", "2")]
+    assert world.assistant.state.dashboard_message == 2
+
+
+def test_dash_command_renews_the_pin(world) -> None:
+    world.assistant.dashboard_shown(7, "старий")
+    world.deliver(message_update(OWNER, "/dash"))
+    methods = [call["method"] for call in world.telegram.calls if call["method"] != "getMe"]
+    assert methods == ["sendMessage", "unpinChatMessage", "pinChatMessage"]
+    assert world.telegram.sent[0]["text"].startswith("📵✅ 🎯⬜")
 
 
 def test_lost_network_is_one_quiet_line(world, caplog: pytest.LogCaptureFixture) -> None:

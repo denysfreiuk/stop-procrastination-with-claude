@@ -84,6 +84,34 @@ def test_words_tell_how_many_wait_for_anki(assistant: Assistant, journal: Journa
     assert "у черзі на Anki: 4" in assistant.words("reluctant: I was reluctant to ask", NOW).text
 
 
+def test_the_dashboard_follows_the_entries(assistant: Assistant, journal: Journal) -> None:
+    first = assistant.dashboard_due(NOW)
+    assert first.edit is None and first.replaces is None, "no message yet: send one"
+    assistant.dashboard_shown(5, first.text)
+    assert assistant.dashboard_due(NOW + timedelta(seconds=5)) is None, "nothing new"
+
+    assistant.on_command(assistant.focus, "50 ML", NOW)
+    update = assistant.dashboard_due(NOW + timedelta(seconds=10))
+    assert update.edit == 5 and "🎯✅" in update.text
+    assistant.dashboard_shown(5, update.text)
+
+    journal.apply(Edit(DAY, set_values={"gym": True}))  # from Obsidian on the phone
+    assert assistant.dashboard_due(NOW + timedelta(seconds=20)) is None, "other devices are checked once a minute"
+    later = assistant.dashboard_due(NOW + timedelta(minutes=1, seconds=10))
+    assert later.edit == 5 and "🏋️✅" in later.text
+
+
+def test_dash_renews_the_dashboard(assistant: Assistant) -> None:
+    assistant.dashboard_shown(5, "старий")
+    update = assistant.dashboard_due(NOW, renew=True)
+    assert (update.edit, update.replaces) == (None, 5)
+
+
+def test_the_dashboard_survives_a_restart(make_assistant: Callable[[], Assistant]) -> None:
+    make_assistant().dashboard_shown(5, "текст")
+    assert make_assistant().state.dashboard_message == 5
+
+
 def test_the_reminder_mentions_words_waiting_for_anki(assistant: Assistant) -> None:
     assistant.words("borrow, lend", NOW)
     reply = assistant.reminder_due(NOW.replace(hour=20, minute=5))

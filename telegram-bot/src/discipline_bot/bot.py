@@ -11,8 +11,8 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update
-from telegram.error import NetworkError, TelegramError
+from telegram import Bot, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update
+from telegram.error import BadRequest, NetworkError, TelegramError
 from telegram.request import BaseRequest
 from telegram.ext import (
     Application,
@@ -26,7 +26,7 @@ from telegram.ext import (
     filters,
 )
 
-from .assistant import BUTTON_ROWS, Assistant, Handler, Reply, State
+from .assistant import BUTTON_ROWS, Assistant, DashboardUpdate, Handler, Reply, State
 from .commands import CommandError
 from .config import Config, ConfigError, load_config
 from .journal import Journal, JournalBusy
@@ -51,6 +51,7 @@ COMMANDS = (
     ("streak", "Стріки"),
     ("undo", "Скасувати останній запис"),
     ("remind", "Час нагадування: /remind 20:00"),
+    ("dash", "Закріпити дашборд дня заново"),
     ("help", "Усі команди"),
 )
 
@@ -81,6 +82,29 @@ def command_text(text: str | None) -> str:
 
 async def reply_to(update: Update, reply: Reply) -> None:
     await update.effective_message.reply_text(reply.text, reply_markup=inline_markup(reply))
+
+
+async def show_dashboard(bot: Bot, chat_id: int, update: DashboardUpdate, assistant: Assistant) -> None:
+    """Change the pinned dashboard in place, or send and pin a new one when there is none or it is gone.
+
+    One message for all days: a new pin each day would leave a service message in the chat every time.
+    """
+    if update.edit is not None:
+        try:
+            await bot.edit_message_text(update.text, chat_id=chat_id, message_id=update.edit)
+        except BadRequest as error:
+            if "not modified" not in error.message.lower():
+                # Deleted by the user: a new one takes its place.
+                await show_dashboard(bot, chat_id, DashboardUpdate(update.text, None, update.edit), assistant)
+                return
+        assistant.dashboard_shown(update.edit, update.text)
+        return
+    message = await bot.send_message(chat_id, update.text, disable_notification=True)
+    assistant.dashboard_shown(message.message_id, update.text)
+    if update.replaces is not None:
+        with contextlib.suppress(BadRequest):
+            await bot.unpin_chat_message(chat_id, message_id=update.replaces)
+    await bot.pin_chat_message(chat_id, message.message_id, disable_notification=True)
 
 
 async def answer(update: Update, action: Callable[[], Reply]) -> None:
@@ -133,6 +157,17 @@ def build_application(config: Config, assistant: Assistant, request: BaseRequest
             reply = Reply(WRITE_FAILED)
         await query.edit_message_text(reply.text, reply_markup=inline_markup(reply))
 
+    dashboard_lock = asyncio.Lock()
+
+    async def refresh_dashboard(now: datetime, renew: bool = False) -> None:
+        async with dashboard_lock:
+            update = assistant.dashboard_due(now, renew)
+            if update is not None:
+                await show_dashboard(application.bot, config.user_id, update, assistant)
+
+    async def dash(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await refresh_dashboard(local_time(update), renew=True)
+
     async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.effective_message.reply_text("Не знаю такої команди. Усі команди: /help")
 
@@ -157,6 +192,9 @@ def build_application(config: Config, assistant: Assistant, request: BaseRequest
                 if reminder:
                     await application.bot.send_message(config.user_id, reminder.text)
                     assistant.mark_reminder_sent(now)
+                await refresh_dashboard(now)
+            except NetworkError as error:
+                logger.warning("Telegram is unreachable: %s", error)
             except (OSError, TelegramError, JournalBusy, UnicodeDecodeError):
                 logger.exception("Background check failed, will try again")
 
@@ -179,6 +217,7 @@ def build_application(config: Config, assistant: Assistant, request: BaseRequest
     application = builder.build()
     application.add_handler(TypeHandler(Update, gate), group=-1)
     application.add_handler(CommandHandler(["start"], start))
+    application.add_handler(CommandHandler(["dash"], dash))
 
     handlers: dict[str, Handler] = {
         "f": assistant.focus,

@@ -88,6 +88,36 @@ def test_reminder_when_everything_is_filled() -> None:
     assert with_words.endswith("📥 На Anki чекає слів: 3. У Claude Code: /anki-from-notes")
 
 
+def test_goals_come_from_the_habits_page_or_default() -> None:
+    page = "```dataviewjs\nconst GOALS = { focusMinutes: 90, sleepHours: 7.5 };\n```"
+    assert stats.habit_goals(page) == stats.Goals(90, 7.5)
+    assert stats.habit_goals("") == stats.Goals(50, 7)
+
+
+def test_dashboard_ticks_the_habits_of_the_tracker_page() -> None:
+    today = (
+        "---\nfocus_blocks: 1\nfocus_minutes: 50\nscreen_time_min:\nsleep_hours: 6.5\ngym: true\ngym_minutes: 60\n"
+        "new_words: 2\nenergy: 4\ntiktok_relapse: false\n---\n"
+        "## Що вивчив\n- 10:00 PCA\n\n## Нові слова\n- borrow\n- lend\n\n## Підсумок\n\n## Лог\n"
+    )
+    read = reader({0: today, 1: note(30, learned="- 09:00 x"), 2: note(relapse=True)})
+    text = stats.dashboard(read, DAY, stats.Goals(), words_for_anki=5)
+    lines = text.split("\n")
+    assert lines[0] == "📵✅ 🎯✅ 📚✅ 🔤✅ 🏋️✅ 😴⬜ 📝⬜"
+    assert lines[1] == "30 жовтня, пʼятниця · 5 з 7"
+    assert "🎯 Фокус: 50 з 50 хв · блоків: 1" in lines
+    assert "📚 Вивчив: 1 · 🔤 Слів: 2 · 📥 На Anki: 5" in lines
+    assert "😴 Сон: 6.5 год · 🏋️ Зал: 60 хв" in lines
+    assert "📱 Екран: — · 🔋 Енергія: 4" in lines
+    assert lines[-1] == "🔥 Навчання поспіль: 2 · 📵 Без тіктока: 2"
+
+
+def test_dashboard_of_a_day_without_a_note() -> None:
+    text = stats.dashboard(reader({}), DAY, stats.Goals(), words_for_anki=0)
+    assert text.startswith("📵✅ 🎯⬜ 📚⬜ 🔤⬜ 🏋️⬜ 😴⬜ 📝⬜\n30 жовтня, пʼятниця · 1 з 7")
+    assert "😴 Сон: — · 🏋️ Зал: —" in text
+
+
 def test_words_for_anki_skip_the_ones_the_study_page_lists() -> None:
     read = reader({
         0: "## Нові слова\n- borrow\n- reluctant — Friends\n- reluctant — I was reluctant\n",

@@ -17,6 +17,7 @@ from .markdown import append_line, properties, remove_line, render_value, sectio
 DAILY_FOLDER = Path("Journal") / "Daily"
 TEMPLATE = Path("Templates") / "Daily.md"
 STUDY_PAGE = Path("Слова на вивчення.md")
+HABITS_PAGE = Path("Звички.md")
 
 FOCUS = "Фокус"
 LEARNED = "Що вивчив"
@@ -25,6 +26,7 @@ PHONE = "Телефон / тікток"
 GYM = "Зал"
 FOOD = "Їжа"
 NOTE = "Нотатка дня"
+SUMMARY = "Підсумок"
 LOG = "Лог"
 
 WRITE_TRIES = 5
@@ -131,9 +133,9 @@ class Journal:
         names = (path.stem for path in folder.glob("*.md")) if folder.is_dir() else ()
         return sorted(date.fromisoformat(name) for name in names if _NOTE_NAME.match(name))
 
-    def read_study_page(self) -> str:
-        """The page Claude keeps: the table of words being studied and the words already in Anki."""
-        return self._read(self.vault / STUDY_PAGE) or ""
+    def read_page(self, page: Path) -> str:
+        """A page of the vault outside the journal, such as STUDY_PAGE; empty when there is none."""
+        return self._read(self.vault / page) or ""
 
     def _create(self, day: date, now: datetime) -> None:
         path = self.note_path(day)

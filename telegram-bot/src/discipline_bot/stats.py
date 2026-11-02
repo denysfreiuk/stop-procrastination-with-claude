@@ -8,16 +8,26 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from .commands import read_vocabulary_line
-from .journal import FOOD, LEARNED, WORDS, to_number
+from .journal import FOOD, LEARNED, SUMMARY, WORDS, to_number
 from .markdown import list_items, properties, section_lines
 
 MONTHS = (
     "січня", "лютого", "березня", "квітня", "травня", "червня",
     "липня", "серпня", "вересня", "жовтня", "листопада", "грудня",
 )
+WEEKDAYS = ("понеділок", "вівторок", "середа", "четвер", "пʼятниця", "субота", "неділя")
 IN_ANKI = "Уже в Anki"
 _IN_ANKI_LINE = re.compile(r"^- (\d{4}-\d{2}-\d{2}) · (.+?)\s*$")
+# The goals live in Звички.md, in the line `const GOALS = { focusMinutes: 50, sleepHours: 7 };`.
+_FOCUS_GOAL = re.compile(r"\bfocusMinutes:\s*(\d+(?:\.\d+)?)")
+_SLEEP_GOAL = re.compile(r"\bsleepHours:\s*(\d+(?:\.\d+)?)")
 ReadNote = Callable[[date], "str | None"]
+
+
+@dataclass(frozen=True)
+class Goals:
+    focus_minutes: float = 50
+    sleep_hours: float = 7
 
 
 @dataclass(frozen=True)
@@ -161,6 +171,54 @@ def tiktok_streak(read: ReadNote, today: date) -> int:
 
 def gym_days(read: ReadNote, today: date, days: int = 7) -> int:
     return sum(read_day(read(today - timedelta(days=offset))).gym for offset in range(days))
+
+
+def habit_goals(habits_page: str) -> Goals:
+    """The goals the habit tracker page uses, so the dashboard ticks the same habits."""
+    focus = _FOCUS_GOAL.search(habits_page)
+    sleep = _SLEEP_GOAL.search(habits_page)
+    return Goals(
+        float(focus[1]) if focus else Goals.focus_minutes,
+        float(sleep[1]) if sleep else Goals.sleep_hours,
+    )
+
+
+def dashboard(read: ReadNote, today: date, goals: Goals, words_for_anki: int) -> str:
+    """The pinned message: today's habits as on the Звички page, then the numbers behind them.
+
+    The first line is the habits alone, because the pinned bar in Telegram shows only the start.
+    """
+    text = read(today) or ""
+    day = read_day(text)
+    sleep = to_number(day.sleep_hours) if day.sleep_hours else None
+    habits = (
+        ("📵", not day.relapse),
+        ("🎯", day.focus_minutes >= goals.focus_minutes),
+        ("📚", day.learned > 0),
+        ("🔤", day.new_words > 0),
+        ("🏋️", day.gym),
+        ("😴", sleep is not None and sleep >= goals.sleep_hours),
+        ("📝", bool(section_lines(text, SUMMARY))),
+    )
+    done = sum(ok for _, ok in habits)
+
+    def shown(value: str, unit: str) -> str:
+        return f"{value} {unit}" if value else "—"
+
+    return "\n".join(
+        (
+            " ".join(f"{icon}{'✅' if ok else '⬜'}" for icon, ok in habits),
+            f"{format_day(today)}, {WEEKDAYS[today.weekday()]} · {done} з {len(habits)}",
+            "",
+            f"🎯 Фокус: {day.focus_minutes} з {goals.focus_minutes:g} хв · блоків: {day.focus_blocks}",
+            f"📚 Вивчив: {day.learned} · 🔤 Слів: {day.new_words} · 📥 На Anki: {words_for_anki}",
+            f"😴 Сон: {shown(day.sleep_hours, 'год')} · 🏋️ Зал: {f'{day.gym_minutes} хв' if day.gym else '—'}",
+            f"📱 Екран: {shown(day.screen_minutes, 'хв')} · 🔋 Енергія: {day.energy or '—'}",
+            f"📵 Тікток: {'зрив' if day.relapse else 'без зривів'}",
+            "",
+            f"🔥 Навчання поспіль: {streak(read, today, studied)} · 📵 Без тіктока: {tiktok_streak(read, today)}",
+        )
+    )
 
 
 def streak_report(read: ReadNote, today: date) -> str:

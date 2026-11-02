@@ -25,11 +25,15 @@ from .commands import (
 )
 from .config import set_env_value
 from .files import atomic_write
-from .journal import FOCUS, FOOD, GYM, LEARNED, LOG, NOTE, PHONE, WORDS, Edit, Journal, Undo
+from .journal import (
+    FOCUS, FOOD, GYM, HABITS_PAGE, LEARNED, LOG, NOTE, PHONE, STUDY_PAGE, WORDS, Edit, Journal, Undo,
+)
 from .markdown import section_lines
 
 PENDING_LIFETIME = timedelta(minutes=15)
 CONFIRM_AFTER = timedelta(seconds=5)
+# Changes from Obsidian on other devices reach the dashboard this often.
+DASHBOARD_EVERY = timedelta(minutes=1)
 MAX_TOPICS = 5
 MAX_UNDO = 20
 MAX_FOCUS_MINUTES = 720
@@ -71,6 +75,7 @@ HELP = """Будь-який текст іде в лог дня.
 /streak — стріки
 /undo — скасувати останній запис
 /remind 20:00 — час нагадування
+/dash — закріпити дашборд дня заново
 
 Команди без тексту самі спитають, що записати."""
 
@@ -96,8 +101,15 @@ class Unconfirmed:
     written: datetime
 
 
+@dataclass(frozen=True)
+class DashboardUpdate:
+    text: str
+    edit: int | None  # the pinned message to change in place
+    replaces: int | None = None  # an earlier dashboard to unpin once a new one is sent
+
+
 class State:
-    """What survives a restart: recent topics, undo history, the last reminder's day."""
+    """What survives a restart: recent topics, undo history, the last reminder's day, the dashboard."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -111,12 +123,16 @@ class State:
             for item in data.get("undo", [])
         ]
         self.reminder_sent: str | None = data.get("reminder_sent")
+        self.dashboard_message: int | None = data.get("dashboard_message")
+        self.dashboard_text: str | None = data.get("dashboard_text")
 
     def save(self) -> None:
         data = {
             "topics": self.topics,
             "undo": [asdict(item) for item in self.undo],
             "reminder_sent": self.reminder_sent,
+            "dashboard_message": self.dashboard_message,
+            "dashboard_text": self.dashboard_text,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(self.path, json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
@@ -134,6 +150,8 @@ class Assistant:
         self.env_file = env_file
         self.pending: Pending | None = None
         self.unconfirmed: list[Unconfirmed] = []
+        self.dashboard_dirty = True
+        self.dashboard_checked: datetime | None = None
         self.buttons: dict[str, Handler] = {
             "🎯 Фокус": self.focus,
             "📚 Вивчив": self.learned,
@@ -153,6 +171,7 @@ class Assistant:
 
     def on_text(self, text: str, now: datetime) -> Reply:
         """A button, the answer to the bot's last question, or an entry for the log."""
+        self.dashboard_dirty = True
         action = self.buttons.get(text.strip())
         if action:
             self.pending = None
@@ -168,11 +187,13 @@ class Assistant:
 
     def on_command(self, handler: Handler, args: str, now: datetime) -> Reply:
         self.pending = None
+        self.dashboard_dirty = True
         return handler(args, now)
 
     def on_button(self, data: str, now: datetime) -> Reply:
         """An inline button: `kind:value`."""
         self.pending = None
+        self.dashboard_dirty = True
         kind, _, value = data.partition(":")
         if kind == "focus":
             return self._ask_topic(int(value), now)
@@ -283,7 +304,7 @@ class Assistant:
         return Reply(f"📥 +{len(new_words)}{with_context} у черзі на Anki (усього: {waiting})")
 
     def words_for_anki(self) -> int:
-        return stats.words_for_anki(self.journal.days(), self.journal.read, self.journal.read_study_page())
+        return stats.words_for_anki(self.journal.days(), self.journal.read, self.journal.read_page(STUDY_PAGE))
 
     def _section(self, now: datetime, heading: str) -> list[str]:
         return section_lines(self.journal.read(now.date()) or "", heading)
@@ -388,4 +409,30 @@ class Assistant:
 
     def mark_reminder_sent(self, now: datetime) -> None:
         self.state.reminder_sent = now.date().isoformat()
+        self.state.save()
+
+    # The pinned dashboard
+
+    def dashboard_due(self, now: datetime, renew: bool = False) -> DashboardUpdate | None:
+        """Checked regularly: right after the user wrote something, and once a minute for other devices.
+
+        renew sends a new message even if the old one is fine, for when the user unpinned it.
+        """
+        stale = self.dashboard_checked is None or now - self.dashboard_checked >= DASHBOARD_EVERY
+        if not (renew or self.dashboard_dirty or stale):
+            return None
+        self.dashboard_dirty = False
+        self.dashboard_checked = now
+        goals = stats.habit_goals(self.journal.read_page(HABITS_PAGE))
+        text = stats.dashboard(self.journal.read, now.date(), goals, self.words_for_anki())
+        message = self.state.dashboard_message
+        if renew or message is None:
+            return DashboardUpdate(text, None, message)
+        if text == self.state.dashboard_text:
+            return None
+        return DashboardUpdate(text, message)
+
+    def dashboard_shown(self, message_id: int, text: str) -> None:
+        self.state.dashboard_message = message_id
+        self.state.dashboard_text = text
         self.state.save()
