@@ -193,6 +193,82 @@ def test_gym_adds_minutes_and_a_line(assistant: Assistant, journal: Journal) -> 
     assert section(journal, GYM) == ["- 14:32 · 60 хв · ноги", "- 14:32 · 30 хв"]
 
 
+def test_a_workout_set_by_set(assistant: Assistant, journal: Journal) -> None:
+    reply = assistant.on_text("🏋️ Зал", NOW)
+    assert reply.buttons[0][0] == ("▶️ Почати тренування", "workout:start")
+    assert "почалось о 14:32" in assistant.on_button("workout:start", NOW).text
+    assert "Жим лежачи" in assistant.on_text("Жим лежачи", NOW).text
+    reply = assistant.on_text("60 10", NOW + timedelta(minutes=3))
+    assert reply.text.startswith("✅ Жим лежачи, підхід 1: 60×10")
+    assert [label for row in reply.buttons for label, _ in row] == ["➕ Підхід", "🔄 Вправа", "⏸ Пауза", "🏁 Завершити"]
+    assistant.on_text("62.5 8", NOW + timedelta(minutes=6))
+    assert "Підхід 3" in assistant.on_button("workout:set", NOW).text
+    assistant.on_button("workout:exercise", NOW)
+    assistant.on_text("Підтягування", NOW)
+    assistant.on_text("8", NOW + timedelta(minutes=10))
+    assert journal.read(DAY) is None, "the sets reach the note when the workout ends"
+
+    reply = assistant.on_button("workout:finish", NOW + timedelta(minutes=40))
+    assert section(journal, GYM) == [
+        "- 14:32 · 40 хв · Жим лежачи, Підтягування",
+        "  - Жим лежачи: 60×10, 62.5×8",
+        "  - Підтягування: 8",
+    ]
+    assert values(journal)["gym"] == "true" and values(journal)["gym_minutes"] == "40"
+    assert "тоннаж: 1100 кг" in reply.text
+    assert assistant.state.workout is None
+    assert section(journal, LOG) == []
+
+
+def test_a_paused_workout_lets_text_go_to_the_log(assistant: Assistant, journal: Journal) -> None:
+    assistant.on_button("workout:start", NOW)
+    assistant.on_text("Присідання", NOW)
+    assistant.on_command(assistant.words, "borrow", NOW)
+    assert assistant.state.workout.exercise == "Присідання", "commands work without a pause"
+    assistant.on_button("workout:pause", NOW)
+    assistant.on_text("болить плече", NOW)
+    assert section(journal, LOG) == ["- 14:32 болить плече"]
+    assert "Присідання, підходів: 0" in assistant.gym("", NOW).text
+    assistant.on_text("80 8", NOW)
+    assert [lift.reps for lift in assistant.state.workout.sets] == [8]
+
+
+def test_undo_in_a_workout_takes_back_the_last_step(assistant: Assistant, journal: Journal) -> None:
+    assistant.on_button("workout:start", NOW)
+    assistant.on_text("Жим", NOW)
+    assistant.on_text("60 10", NOW)
+    assistant.on_command(assistant.words, "borrow", NOW)
+    assistant.on_text("60 8", NOW)
+    assert assistant.undo("", NOW).text == "↩️ Скасовано: підхід: Жим 60×8"
+    assert assistant.undo("", NOW).text == "↩️ Скасовано: слова: borrow"
+    assert section(journal, WORDS) == []
+    assistant.on_button("workout:finish", NOW)
+    assert "Жим: 60×10" in section(journal, GYM)[1]
+    assert assistant.undo("", NOW).text == "↩️ Скасовано: тренування 1 хв"
+    assert section(journal, GYM) == []
+
+
+def test_a_set_needs_an_exercise_and_an_empty_workout_writes_nothing(assistant: Assistant, journal: Journal) -> None:
+    assistant.on_button("workout:start", NOW)
+    with pytest.raises(CommandError, match="назву вправи"):
+        assistant.on_text("60 10", NOW)
+    assert "нічого не записав" in assistant.on_button("workout:finish", NOW).text
+    assert journal.read(DAY) is None
+
+
+def test_a_forgotten_workout_closes_itself(make_assistant: Callable[[], Assistant], journal: Journal) -> None:
+    first = make_assistant()
+    first.on_button("workout:start", NOW)
+    first.on_text("Жим", NOW)
+    first.on_text("60 10", NOW + timedelta(minutes=20))
+    restarted = make_assistant()
+    assert "підходів: 1" in restarted.dashboard_due(NOW + timedelta(minutes=21)).text
+    assert restarted.workout_due(NOW + timedelta(hours=2)) is None
+    closed = restarted.workout_due(NOW + timedelta(hours=2, minutes=21))
+    assert closed.text.startswith("Закрив тренування сам")
+    assert section(journal, GYM)[0] == "- 14:32 · 20 хв · Жим"
+
+
 def test_food_note_and_energy(assistant: Assistant, journal: Journal) -> None:
     assistant.eat("борщ", NOW)
     assistant.note("Хороший день", NOW)

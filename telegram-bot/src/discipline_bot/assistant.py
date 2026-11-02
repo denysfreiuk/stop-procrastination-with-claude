@@ -29,14 +29,20 @@ from .journal import (
     FOCUS, FOOD, GYM, HABITS_PAGE, LEARNED, LOG, NOTE, PHONE, STUDY_PAGE, WORDS, Edit, Journal, Undo,
 )
 from .markdown import section_lines
+from .workout import Lift, Workout, exercise_name, parse_set, set_text
 
 PENDING_LIFETIME = timedelta(minutes=15)
 CONFIRM_AFTER = timedelta(seconds=5)
 # Changes from Obsidian on other devices reach the dashboard this often.
 DASHBOARD_EVERY = timedelta(minutes=1)
+# A workout with nothing done for this long is closed by itself, as of its last set.
+WORKOUT_IDLE = timedelta(hours=2)
 MAX_TOPICS = 5
+MAX_EXERCISES = 8
 MAX_UNDO = 20
 MAX_FOCUS_MINUTES = 720
+# An undo step for a set of the workout: sets reach the note only when the workout ends.
+SET_UNDO = "workout"
 
 USAGE_FOCUS = "Приклад: /f 50 ML"
 USAGE_GYM = "Приклад: /gym 60 ноги"
@@ -50,6 +56,10 @@ WORDS_QUESTION = """Які слова в Anki? Через кому: borrow, lend
 reluctant: She was reluctant to leave (Friends)
 
 Кожне слово можна писати з нового рядка."""
+GYM_QUESTION = """🏋️ Почати тренування по підходах?
+
+Або запиши одним рядком, скільки хвилин і що робив: 60 ноги"""
+SET_HINT = "Після підходу напиши вагу і повторення: 60 10\nБез ваги — лише повторення: 12"
 
 BUTTON_ROWS = (
     ("🎯 Фокус", "📚 Вивчив", "🔤 Слова"),
@@ -67,7 +77,8 @@ HELP = """Будь-який текст іде в лог дня.
 /s 95 — час екрана, хвилини
 /tt — зірвався на тікток
 /sleep 7.5 — сон, години
-/gym 60 ноги — зал
+/gym — тренування по підходах
+/gym 60 ноги — зал одним рядком
 /eat текст — їжа
 /e 4 — енергія дня, 1–5
 /n текст — нотатка дня
@@ -125,6 +136,8 @@ class State:
         self.reminder_sent: str | None = data.get("reminder_sent")
         self.dashboard_message: int | None = data.get("dashboard_message")
         self.dashboard_text: str | None = data.get("dashboard_text")
+        self.exercises: list[str] = data.get("exercises", [])
+        self.workout: Workout | None = Workout.from_dict(data["workout"]) if data.get("workout") else None
 
     def save(self) -> None:
         data = {
@@ -133,6 +146,8 @@ class State:
             "reminder_sent": self.reminder_sent,
             "dashboard_message": self.dashboard_message,
             "dashboard_text": self.dashboard_text,
+            "exercises": self.exercises,
+            "workout": self.workout.to_dict() if self.workout else None,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(self.path, json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
@@ -183,6 +198,8 @@ class Assistant:
             except CommandError:
                 self.pending = pending
                 raise
+        if self.state.workout and not self.state.workout.paused:
+            return self._workout_text(text, now)
         return self.log(text, now)
 
     def on_command(self, handler: Handler, args: str, now: datetime) -> Reply:
@@ -204,6 +221,10 @@ class Assistant:
             return self.sleep(value, now)
         if kind == "energy":
             return self.energy(value, now)
+        if kind == "workout":
+            return self._workout_button(value, now)
+        if kind == "exercise" and self.state.workout:
+            return self._start_exercise(self.state.exercises[int(value)], now)
         return Reply("Ця кнопка вже не працює.")
 
     def _ask(self, handler: Handler, question: str, now: datetime, buttons: Buttons = ()) -> Reply:
@@ -341,12 +362,117 @@ class Assistant:
 
     def gym(self, args: str, now: datetime) -> Reply:
         if not args.strip():
-            return self._ask(self.gym, "Скільки хвилин і що робив? Наприклад: 60 ноги", now)
+            if self.state.workout:
+                return self._workout_button("resume", now)
+            start = ((("▶️ Почати тренування", "workout:start"),),)
+            return self._ask(self.gym, GYM_QUESTION, now, start)
         minutes, what = parse_minutes_and_text(args, USAGE_GYM)
         line = f"- {clock(now)} · {minutes} хв" + (f" · {what}" if what else "")
         edit = Edit(now.date(), ((GYM, line),), {"gym": True}, {"gym_minutes": minutes})
         self._write(edit, f"зал {minutes} хв", now)
         return Reply(f"✅ Зал: {minutes} хв" + (f" · {what}" if what else ""))
+
+    # The gym mode: while a workout runs, plain text is a set or the name of the next exercise.
+
+    def _workout_button(self, action: str, now: datetime) -> Reply:
+        workout = self.state.workout
+        if action == "start" and workout is None:
+            self.state.workout = Workout(started=now, last=now)
+            self.state.save()
+            return self._ask_exercise(f"🏋️ Тренування почалось о {clock(now)}. Яка перша вправа?")
+        if workout is None:
+            return Reply("Тренування вже закінчилось. Нове: /gym")
+        workout.last = now
+        if action == "finish":
+            return self._finish_workout(now, now)
+        workout.paused = action == "pause"
+        self.state.save()
+        if action == "pause":
+            return Reply(
+                "⏸ Тренування на паузі. Пиши що завгодно, усе піде як зазвичай.\nПовернутись: /gym або кнопка.",
+                ((("▶️ Продовжити", "workout:resume"),),),
+            )
+        if action == "exercise" or workout.exercise is None:
+            return self._ask_exercise("Яка вправа? Напиши назву або обери:")
+        done = len(workout.sets_of(workout.exercise))
+        if action == "set":
+            return Reply(f"Підхід {done + 1} · {workout.exercise}: вага і повторення?", self._workout_buttons())
+        return Reply(
+            f"▶️ Тренування триває з {clock(workout.started)}. Зараз: {workout.exercise}, підходів: {done}.\n"
+            "Напиши наступний підхід або назву нової вправи.",
+            self._workout_buttons(),
+        )
+
+    def _ask_exercise(self, question: str) -> Reply:
+        recent = [(name, f"exercise:{index}") for index, name in enumerate(self.state.exercises)]
+        return Reply(question, tuple(tuple(recent[start : start + 2]) for start in range(0, len(recent), 2)))
+
+    @staticmethod
+    def _workout_buttons() -> Buttons:
+        return (
+            (("➕ Підхід", "workout:set"), ("🔄 Вправа", "workout:exercise")),
+            (("⏸ Пауза", "workout:pause"), ("🏁 Завершити", "workout:finish")),
+        )
+
+    def _workout_text(self, text: str, now: datetime) -> Reply:
+        workout = self.state.workout
+        parsed = parse_set(one_line(text))
+        if parsed is None:
+            return self._start_exercise(text, now)
+        if workout.exercise is None:
+            raise CommandError("Спершу напиши назву вправи, а потім вагу і повторення.")
+        weight, reps = parsed
+        workout.sets.append(Lift(workout.exercise, weight, reps))
+        workout.last = now
+        label = f"підхід: {workout.exercise} {set_text(weight, reps)}"
+        self.state.undo = [*self.state.undo, Undo(SET_UNDO, (), {}, label)][-MAX_UNDO:]
+        self.state.save()
+        number = len(workout.sets_of(workout.exercise))
+        return Reply(
+            f"✅ {workout.exercise}, підхід {number}: {set_text(weight, reps)}\nДалі просто напиши наступний підхід.",
+            self._workout_buttons(),
+        )
+
+    def _start_exercise(self, text: str, now: datetime) -> Reply:
+        workout = self.state.workout
+        name = exercise_name(one_line(text))
+        workout.exercise = name
+        workout.paused = False
+        workout.last = now
+        self.state.exercises = [name, *(item for item in self.state.exercises if item.lower() != name.lower())]
+        self.state.exercises = self.state.exercises[:MAX_EXERCISES]
+        self.state.save()
+        done = len(workout.sets_of(name))
+        again = f" (уже підходів: {done})" if done else ""
+        return Reply(f"🏋️ {name}{again}\n{SET_HINT}")
+
+    def _finish_workout(self, end: datetime, now: datetime) -> Reply:
+        workout, self.state.workout = self.state.workout, None
+        # Sets are in the entry now: undo takes the whole workout back, not one set.
+        self.state.undo = [item for item in self.state.undo if item.day != SET_UNDO]
+        self.state.save()
+        if not workout.sets:
+            return Reply("🏁 Тренування закрив. Підходів не було, тож нічого не записав.")
+        minutes = max(1, round((end - workout.started).total_seconds() / 60))
+        lines = tuple((GYM, line) for line in workout.lines(minutes))
+        edit = Edit(workout.started.date(), lines, {"gym": True}, {"gym_minutes": minutes})
+        self._write(edit, f"тренування {minutes} хв", now)
+        return Reply(f"🏁 {workout.summary(minutes)}")
+
+    def workout_due(self, now: datetime) -> Reply | None:
+        """Checked regularly: a forgotten workout is closed as of its last set."""
+        workout = self.state.workout
+        if workout is None or now - workout.last < WORKOUT_IDLE:
+            return None
+        reply = self._finish_workout(workout.last, now)
+        return Reply(f"Закрив тренування сам: дві години без підходів.\n{reply.text}")
+
+    def workout_line(self) -> str | None:
+        workout = self.state.workout
+        if workout is None:
+            return None
+        line = f"🏋️ Тренування з {clock(workout.started)} · підходів: {len(workout.sets)}"
+        return line + (" · пауза" if workout.paused else "")
 
     def eat(self, args: str, now: datetime) -> Reply:
         entry = one_line(args)
@@ -382,10 +508,14 @@ class Assistant:
         if not self.state.undo:
             return Reply("Нема що скасовувати.")
         last = self.state.undo[-1]
-        self.journal.revert(last)
+        if last.day == SET_UNDO:
+            if self.state.workout and self.state.workout.sets:
+                self.state.workout.sets.pop()
+        else:
+            self.journal.revert(last)
+            self.unconfirmed = [item for item in self.unconfirmed if item.edit.lines != last.lines]
         self.state.undo = self.state.undo[:-1]
         self.state.save()
-        self.unconfirmed = [item for item in self.unconfirmed if item.edit.lines != last.lines]
         return Reply(f"↩️ Скасовано: {last.label}")
 
     def remind(self, args: str, now: datetime) -> Reply:
@@ -424,7 +554,7 @@ class Assistant:
         self.dashboard_dirty = False
         self.dashboard_checked = now
         goals = stats.habit_goals(self.journal.read_page(HABITS_PAGE))
-        text = stats.dashboard(self.journal.read, now.date(), goals, self.words_for_anki())
+        text = stats.dashboard(self.journal.read, now.date(), goals, self.words_for_anki(), self.workout_line())
         message = self.state.dashboard_message
         if renew or message is None:
             return DashboardUpdate(text, None, message)

@@ -43,7 +43,7 @@ COMMANDS = (
     ("s", "Час екрана, хвилини"),
     ("tt", "Зірвався на тікток"),
     ("sleep", "Сон, години"),
-    ("gym", "Зал: /gym 60 ноги"),
+    ("gym", "Тренування по підходах або /gym 60 ноги"),
     ("eat", "Їжа"),
     ("e", "Енергія дня, 1–5"),
     ("n", "Нотатка дня"),
@@ -192,6 +192,9 @@ def build_application(config: Config, assistant: Assistant, request: BaseRequest
                 if reminder:
                     await application.bot.send_message(config.user_id, reminder.text)
                     assistant.mark_reminder_sent(now)
+                closed = assistant.workout_due(now)
+                if closed:
+                    await application.bot.send_message(config.user_id, closed.text)
                 await refresh_dashboard(now)
             except NetworkError as error:
                 logger.warning("Telegram is unreachable: %s", error)

@@ -183,10 +183,11 @@ def habit_goals(habits_page: str) -> Goals:
     )
 
 
-def dashboard(read: ReadNote, today: date, goals: Goals, words_for_anki: int) -> str:
+def dashboard(read: ReadNote, today: date, goals: Goals, words_for_anki: int, workout: str | None = None) -> str:
     """The pinned message: today's habits as on the Звички page, then the numbers behind them.
 
     The first line is the habits alone, because the pinned bar in Telegram shows only the start.
+    `workout` is a line about a workout that is still going.
     """
     text = read(today) or ""
     day = read_day(text)
@@ -209,6 +210,7 @@ def dashboard(read: ReadNote, today: date, goals: Goals, words_for_anki: int) ->
         (
             " ".join(f"{icon}{'✅' if ok else '⬜'}" for icon, ok in habits),
             f"{format_day(today)}, {WEEKDAYS[today.weekday()]} · {done} з {len(habits)}",
+            *((workout,) if workout else ()),
             "",
             f"🎯 Фокус: {day.focus_minutes} з {goals.focus_minutes:g} хв · блоків: {day.focus_blocks}",
             f"📚 Вивчив: {day.learned} · 🔤 Слів: {day.new_words} · 📥 На Anki: {words_for_anki}",
