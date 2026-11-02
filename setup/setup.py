@@ -42,6 +42,8 @@ VAULT_GITIGNORE = """# Per-device state of Obsidian and temporary files
 .*.tmp
 .DS_Store
 """
+# Obsidian writes LF; without this, git on Windows could turn every note into a changed file.
+VAULT_GITATTRIBUTES = "* text=auto eol=lf\n*.png binary\n*.jpg binary\n*.pdf binary\n"
 SSH_KEY = re.compile(r"^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp\d+|sk-ssh-ed25519@openssh\.com) [A-Za-z0-9+/=]+( .*)?$")
 GIT_IDENTITY = ["-c", "user.name=discipline-setup", "-c", "user.email=setup@localhost"]
 PLUGIN_SERVER = ROOT / "claude-anki" / "plugins" / "ankiclaude" / "server"
@@ -218,11 +220,11 @@ def share_vault(vault: Path) -> None:
     if not (vault / ".git").exists():
         git_in(vault, "init", "--quiet", "--initial-branch=main")
     git_in(vault, "config", "receive.denyCurrentBranch", "updateInstead")
-    ignore = vault / ".gitignore"
-    if not ignore.exists():
-        ignore.write_text(VAULT_GITIGNORE, encoding="utf-8", newline="\n")
+    for name, text in ((".gitignore", VAULT_GITIGNORE), (".gitattributes", VAULT_GITATTRIBUTES)):
+        if not (vault / name).exists():
+            (vault / name).write_text(text, encoding="utf-8", newline="\n")
     has_commits = git_in(vault, "rev-parse", "--verify", "--quiet", "HEAD", check=False).returncode == 0
-    has_notes = any(path.name not in {".git", ".gitignore"} for path in vault.iterdir())
+    has_notes = any(path.name not in {".git", ".gitignore", ".gitattributes"} for path in vault.iterdir())
     # An empty repository stays empty: the first push from a laptop brings its own history.
     if not has_commits and has_notes:
         git_in(vault, "add", "--all")

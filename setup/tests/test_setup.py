@@ -322,14 +322,18 @@ class GitOnly(unittest.TestCase):
                               text=True, timeout=20)
 
     def test_git_on_the_vault_is_allowed(self) -> None:
-        self.assertEqual(self.ssh(f"git-upload-pack '{self.vault}'").returncode, 0)
-        self.assertEqual(self.ssh(f"git-upload-pack '{self.vault}/'").returncode, 0)
+        # Without a client on the other end git stops after its first reply; that reply is what counts.
+        for command in (f"git-upload-pack '{self.vault}'", f"git-upload-pack '{self.vault}/'", f"git-receive-pack '{self.vault}'"):
+            result = self.ssh(command)
+            self.assertRegex(result.stdout, r"^[0-9a-f]{4}", command)
+            self.assertNotIn("Only", result.stderr, command)
 
     def test_everything_else_is_refused(self) -> None:
         for command in ("bash", "ls /", f"git-upload-pack '{self.other}'", f"git-upload-pack '{self.vault}/../other'",
-                        f"git-upload-pack '{self.vault}'; rm -rf /tmp/x", ""):
+                        f"git-upload-pack '{self.vault}'; rm -rf /tmp/x", f"git-upload-pack '{self.vault}' $(id)", ""):
             result = self.ssh(command)
-            self.assertNotEqual(result.returncode, 0, command)
+            self.assertEqual(result.returncode, 1, command)
+            self.assertEqual(result.stdout, "", command)
 
 
 if __name__ == "__main__":
