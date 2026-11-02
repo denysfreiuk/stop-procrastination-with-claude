@@ -17,6 +17,7 @@ class PathRules(unittest.TestCase):
     def test_vault_template_is_allowed(self) -> None:
         for path in (
             "obsidian/Dashboard.md",
+            "obsidian/Звички.md",
             "obsidian/CLAUDE.md",
             "obsidian/Templates/Daily.md",
             "obsidian/.obsidian/daily-notes.json",

@@ -39,6 +39,7 @@ telegram-bot/data/
 # Only the template of the vault is public; check_privacy.py enforces the same rule.
 obsidian/*
 !obsidian/Dashboard.md
+!obsidian/Звички.md
 !obsidian/CLAUDE.md
 !obsidian/Templates/
 !obsidian/.obsidian/

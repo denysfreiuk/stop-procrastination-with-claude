@@ -70,7 +70,7 @@ jobs:
           diff "$RUNNER_TEMP/requirements.txt" requirements.lock.txt
 
   templates-js:
-    name: Template scripts (jsdom)
+    name: Template and vault scripts (jsdom)
     runs-on: ubuntu-latest
     defaults:
       run:

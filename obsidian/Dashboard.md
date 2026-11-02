@@ -1,6 +1,6 @@
 # Dashboard
 
-Для підрахунків потрібен плагін Dataview з увімкненою опцією **Enable JavaScript Queries**.
+Для підрахунків потрібен плагін Dataview з увімкненою опцією **Enable JavaScript Queries**. Звички по днях — на сторінці [[Звички]].
 
 ```dataviewjs
 const LEARNED_SECTION = "Що вивчив";

@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VAULT = "obsidian/"
 VAULT_FILES = {
     "Dashboard.md",
+    "Звички.md",
     "CLAUDE.md",
     ".obsidian/daily-notes.json",
     ".obsidian/templates.json",
