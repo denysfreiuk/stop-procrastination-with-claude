@@ -8,7 +8,6 @@ sleep_hours:
 gym: false
 gym_minutes: 0
 new_words: 0
-energy:
 anki_done: false
 ---
 ## Фокус

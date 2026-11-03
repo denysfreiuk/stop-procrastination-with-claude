@@ -118,7 +118,7 @@ def test_a_stranger_cannot_press_buttons(world) -> None:
             "id": "1",
             "from": {"id": STRANGER, "is_bot": False, "first_name": "Хтось"},
             "chat_instance": "1",
-            "data": "energy:5",
+            "data": "sleep:7",
             "message": {"message_id": 1, "date": MESSAGE_TIME, "chat": {"id": OWNER, "type": "private"}},
         },
     }

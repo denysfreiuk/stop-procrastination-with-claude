@@ -63,24 +63,24 @@ def test_gym_days_look_at_seven_days() -> None:
 def test_summary_of_an_empty_day_lists_what_is_missing() -> None:
     text = stats.summary(None, DAY)
     assert text.startswith("📊 30 жовтня\nПоки нічого не записано.")
-    assert "Ще немає: фокус, що вивчив, нові слова, екран, сон, їжа, енергія" in text
+    assert text.endswith("Ще немає: фокус, що вивчив, нові слова, екран, сон, їжа")
 
 
 def test_summary_shows_filled_values_and_the_rest_as_missing() -> None:
     note_text = (
         "---\nfocus_blocks: 2\nfocus_minutes: 100\nscreen_time_min: 95\nsleep_hours: 7.5\n"
-        "gym: true\ngym_minutes: 60\nnew_words: 2\nenergy: 4\ntiktok_relapse: true\n---\n"
+        "gym: true\ngym_minutes: 60\nnew_words: 2\ntiktok_relapse: true\n---\n"
         "## Що вивчив\n- 10:00 x\n\n## Нові слова\n- borrow\n\n## Їжа\n- 13:00 борщ\n"
     )
     text = stats.summary(note_text, DAY)
-    for expected in ("100 хв, блоків: 2", "Вивчив: 1", "Нових слів: 2", "Екран: 95", "зрив", "Сон: 7.5", "Зал: 60", "Енергія: 4"):
+    for expected in ("100 хв, блоків: 2", "Вивчив: 1", "Нових слів: 2", "Екран: 95", "зрив", "Сон: 7.5", "Зал: 60"):
         assert expected in text
     assert "Ще немає" not in text
 
 
 def test_reminder_when_everything_is_filled() -> None:
     note_text = (
-        "---\nfocus_minutes: 10\nscreen_time_min: 0\nsleep_hours: 7\nenergy: 3\n---\n"
+        "---\nfocus_minutes: 10\nscreen_time_min: 0\nsleep_hours: 7\n---\n"
         "## Що вивчив\n- x\n\n## Нові слова\n- y\n\n## Їжа\n- z\n"
     )
     assert stats.reminder(note_text, DAY).endswith("Усе заповнено 👍")
@@ -97,7 +97,7 @@ def test_goals_come_from_the_habits_page_or_default() -> None:
 def test_dashboard_ticks_the_habits_of_the_tracker_page() -> None:
     today = (
         "---\nfocus_blocks: 1\nfocus_minutes: 50\nscreen_time_min:\nsleep_hours: 6.5\ngym: true\ngym_minutes: 60\n"
-        "new_words: 2\nenergy: 4\ntiktok_relapse: false\n---\n"
+        "new_words: 2\ntiktok_relapse: false\n---\n"
         "## Що вивчив\n- 10:00 PCA\n\n## Нові слова\n- borrow\n- lend\n\n## Підсумок\n\n## Лог\n"
     )
     read = reader({0: today, 1: note(30, learned="- 09:00 x"), 2: note(relapse=True)})
@@ -108,7 +108,7 @@ def test_dashboard_ticks_the_habits_of_the_tracker_page() -> None:
     assert "🎯 Фокус: 50 з 50 хв · блоків: 1" in lines
     assert "📚 Вивчив: 1 · 🔤 Слів: 2 · 📥 На Anki: 5" in lines
     assert "😴 Сон: 6.5 год · 🏋️ Зал: 60 хв" in lines
-    assert "📱 Екран: — · 🔋 Енергія: 4" in lines
+    assert "📱 Екран: — · 📵 Тікток: без зривів" in lines
     assert lines[-1] == "🔥 Навчання поспіль: 2 · 📵 Без тіктока: 2"
 
 

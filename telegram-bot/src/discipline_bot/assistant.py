@@ -16,7 +16,6 @@ from .commands import (
     one_line,
     parse_clock,
     parse_duration,
-    parse_energy,
     parse_hours,
     parse_minutes_and_text,
     parse_vocabulary,
@@ -48,7 +47,6 @@ USAGE_FOCUS = "Приклад: /f 50 ML"
 USAGE_GYM = "Приклад: /gym 60 ноги"
 USAGE_SCREEN = "Приклад: /s 95 або /s 1:35"
 USAGE_SLEEP = "Приклад: /sleep 7.5"
-USAGE_ENERGY = "Приклад: /e 4"
 USAGE_WORDS = "Приклад: /w borrow, lend або /w reluctant: She was reluctant to leave"
 WORDS_QUESTION = """Які слова в Anki? Через кому: borrow, lend
 
@@ -64,8 +62,8 @@ SET_HINT = "Після підходу напиши вагу і повторен�
 BUTTON_ROWS = (
     ("🎯 Фокус", "📚 Вивчив", "🔤 Слова"),
     ("😴 Сон", "📱 Екран", "📵 Тікток"),
-    ("🏋️ Зал", "🍽 Їжа", "🔋 Енергія"),
-    ("📊 Сьогодні", "📝 Нотатка", "↩️ Скасувати"),
+    ("🏋️ Зал", "🍽 Їжа", "📝 Нотатка"),
+    ("📊 Сьогодні", "↩️ Скасувати"),
 )
 HELP = """Будь-який текст іде в лог дня.
 
@@ -80,7 +78,6 @@ HELP = """Будь-який текст іде в лог дня.
 /gym — тренування по підходах
 /gym 60 ноги — зал одним рядком
 /eat текст — їжа
-/e 4 — енергія дня, 1–5
 /n текст — нотатка дня
 /today — підсумок дня
 /streak — стріки
@@ -176,7 +173,6 @@ class Assistant:
             "📵 Тікток": self.tiktok,
             "🏋️ Зал": self.gym,
             "🍽 Їжа": self.eat,
-            "🔋 Енергія": self.energy,
             "📊 Сьогодні": self.today,
             "📝 Нотатка": self.note,
             "↩️ Скасувати": self.undo,
@@ -219,8 +215,6 @@ class Assistant:
             return self._save_focus(int(pending_minutes), self.state.topics[int(index)], now)
         if kind == "sleep":
             return self.sleep(value, now)
-        if kind == "energy":
-            return self.energy(value, now)
         if kind == "workout":
             return self._workout_button(value, now)
         if kind == "exercise" and self.state.workout:
@@ -487,14 +481,6 @@ class Assistant:
             return self._ask(self.note, "Що записати в нотатку дня?", now)
         self._write(Edit(now.date(), ((NOTE, entry),)), f"нотатка: {entry}", now)
         return Reply("✅ Записав у нотатку дня")
-
-    def energy(self, args: str, now: datetime) -> Reply:
-        if not args.strip():
-            options = tuple((str(value), f"energy:{value}") for value in range(1, 6))
-            return self._ask(self.energy, "Яка енергія сьогодні?", now, (options,))
-        value = parse_energy(args, USAGE_ENERGY)
-        self._write(Edit(now.date(), set_values={"energy": value}), f"енергія {value}", now)
-        return Reply(f"✅ Енергія: {value}")
 
     # Overviews and settings
 

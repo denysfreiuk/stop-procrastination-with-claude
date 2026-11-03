@@ -9,7 +9,6 @@ from discipline_bot.commands import (
     one_line,
     parse_clock,
     parse_duration,
-    parse_energy,
     parse_hours,
     parse_minutes_and_text,
     parse_vocabulary,
@@ -93,16 +92,6 @@ def test_hours(args: str, hours: float) -> None:
 def test_bad_hours(args: str) -> None:
     with pytest.raises(CommandError):
         parse_hours(args, "")
-
-
-@pytest.mark.parametrize("args", ["0", "6", "4.5", "", "багато"])
-def test_bad_energy(args: str) -> None:
-    with pytest.raises(CommandError):
-        parse_energy(args, "")
-
-
-def test_energy() -> None:
-    assert parse_energy(" 4 ", "") == 4
 
 
 @pytest.mark.parametrize(("text", "expected"), [("20:00", time(20, 0)), ("8:05", time(8, 5)), ("21.30", time(21, 30))])

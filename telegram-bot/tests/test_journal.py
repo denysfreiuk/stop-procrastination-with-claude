@@ -50,8 +50,9 @@ def test_template_has_everything_the_bot_writes() -> None:
         assert f"## {section}\n" in template
     assert {
         "focus_blocks", "focus_minutes", "screen_time_min", "tiktok_relapse", "sleep_hours",
-        "gym", "gym_minutes", "new_words", "energy", "anki_done",
+        "gym", "gym_minutes", "new_words", "anki_done",
     } <= properties(template).keys()
+    assert "energy" not in properties(template), "energy was dropped from the system"
 
 
 def test_render_template_variables() -> None:

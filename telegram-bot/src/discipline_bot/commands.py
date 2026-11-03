@@ -99,13 +99,6 @@ def parse_hours(args: str, usage: str) -> float:
     return round(hours, 2)
 
 
-def parse_energy(args: str, usage: str) -> int:
-    text = args.strip()
-    if text not in {"1", "2", "3", "4", "5"}:
-        raise CommandError(f"Енергія — це число від 1 до 5. {usage}")
-    return int(text)
-
-
 def parse_clock(text: str) -> time:
     match = _CLOCK.match(text.strip())
     if match and int(match[1]) < 24 and int(match[2]) < 60:

@@ -49,7 +49,7 @@ STUDY_PAGE_TEXT = """# Слова на вивчення
 WEEKDAYS = ("пн", "вт", "ср", "чт", "пт", "сб", "нд")
 WEEKLY_PROPERTIES = (
     "focus_minutes", "focus_blocks", "learning_days", "tiktok_free_days", "gym_days", "new_words",
-    "avg_sleep_hours", "avg_screen_time_min", "avg_energy",
+    "avg_sleep_hours", "avg_screen_time_min",
 )
 
 KEY_LINE = re.compile(r"^([A-Za-z_][\w-]*):[ \t]*(.*?)[ \t]*$")
@@ -225,7 +225,6 @@ def totals(days: list[dict[str, Any]]) -> dict[str, Any]:
         "new_words": total("new_words"),
         "avg_sleep_hours": average("sleep_hours"),
         "avg_screen_time_min": average("screen_time_min"),
-        "avg_energy": average("energy"),
     }
 
 

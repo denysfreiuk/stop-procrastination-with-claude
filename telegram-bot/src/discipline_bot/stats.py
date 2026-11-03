@@ -40,7 +40,6 @@ class Day:
     gym: bool
     gym_minutes: int
     new_words: int
-    energy: str
     learned: int
     has_words: bool
     has_food: bool
@@ -57,7 +56,6 @@ def read_day(text: str | None) -> Day:
         gym=values.get("gym") == "true",
         gym_minutes=int(to_number(values.get("gym_minutes"))),
         new_words=int(to_number(values.get("new_words"))),
-        energy=values.get("energy", ""),
         learned=len(list_items(text or "", LEARNED)),
         has_words=bool(section_lines(text or "", WORDS)),
         has_food=bool(section_lines(text or "", FOOD)),
@@ -86,8 +84,6 @@ def filled(day: Day) -> list[str]:
         parts.append(f"🏋️ Зал: {day.gym_minutes} хв")
     if day.has_food:
         parts.append("🍽 Їжа: є записи")
-    if day.energy:
-        parts.append(f"🔋 Енергія: {day.energy}")
     return parts
 
 
@@ -99,7 +95,6 @@ def missing(day: Day) -> list[str]:
         "екран": day.screen_minutes,
         "сон": day.sleep_hours,
         "їжа": day.has_food,
-        "енергія": day.energy,
     }
     return [name for name, value in parts.items() if not value]
 
@@ -215,8 +210,7 @@ def dashboard(read: ReadNote, today: date, goals: Goals, words_for_anki: int, wo
             f"🎯 Фокус: {day.focus_minutes} з {goals.focus_minutes:g} хв · блоків: {day.focus_blocks}",
             f"📚 Вивчив: {day.learned} · 🔤 Слів: {day.new_words} · 📥 На Anki: {words_for_anki}",
             f"😴 Сон: {shown(day.sleep_hours, 'год')} · 🏋️ Зал: {f'{day.gym_minutes} хв' if day.gym else '—'}",
-            f"📱 Екран: {shown(day.screen_minutes, 'хв')} · 🔋 Енергія: {day.energy or '—'}",
-            f"📵 Тікток: {'зрив' if day.relapse else 'без зривів'}",
+            f"📱 Екран: {shown(day.screen_minutes, 'хв')} · 📵 Тікток: {'зрив' if day.relapse else 'без зривів'}",
             "",
             f"🔥 Навчання поспіль: {streak(read, today, studied)} · 📵 Без тіктока: {tiktok_streak(read, today)}",
         )

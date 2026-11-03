@@ -1,6 +1,6 @@
 [project]
 name = "anki-claude-mcp"
-version = "0.6.0"
+version = "0.6.1"
 description = "MCP server for the Anki&Claude Claude Code plugin (talks to Anki via AnkiConnect)"
 readme = "README.md"
 license = "MIT"

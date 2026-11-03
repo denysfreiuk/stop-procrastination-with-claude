@@ -269,13 +269,13 @@ def test_a_forgotten_workout_closes_itself(make_assistant: Callable[[], Assistan
     assert section(journal, GYM)[0] == "- 14:32 · 20 хв · Жим"
 
 
-def test_food_note_and_energy(assistant: Assistant, journal: Journal) -> None:
+def test_food_and_note(assistant: Assistant, journal: Journal) -> None:
     assistant.eat("борщ", NOW)
     assistant.note("Хороший день", NOW)
-    assistant.on_button("energy:4", NOW)
     assert section(journal, FOOD) == ["- 14:32 борщ"]
     assert section(journal, NOTE) == ["Хороший день"]
-    assert values(journal)["energy"] == "4"
+    assert "energy" not in values(journal)
+    assert assistant.on_button("energy:4", NOW).text == "Ця кнопка вже не працює."
 
 
 @pytest.mark.parametrize("row", range(len(BUTTON_ROWS)))

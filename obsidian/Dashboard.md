@@ -60,13 +60,12 @@ dv.table(["Показник", "7 днів", "30 днів"], [
   ["Днів у залі", ...both((pages) => countDays(pages, (page) => page.gym === true))],
   ["Сон, год (середнє)", ...both((pages) => average(pages, "sleep_hours"))],
   ["Екран, хв (середнє)", ...both((pages) => average(pages, "screen_time_min"))],
-  ["Енергія (середнє)", ...both((pages) => average(pages, "energy"))],
 ]);
 
 dv.header(2, "Останні 14 днів");
 const shown = (value) => (isFilled(value) ? value : "—");
 dv.table(
-  ["День", "Фокус", "Екран", "Тікток", "Сон", "Зал", "Слова", "Енергія"],
+  ["День", "Фокус", "Екран", "Тікток", "Сон", "Зал", "Слова"],
   lastDays(14).map((page) => [
     page.file.link,
     number(page.focus_minutes),
@@ -75,7 +74,6 @@ dv.table(
     shown(page.sleep_hours),
     page.gym === true ? number(page.gym_minutes) : "—",
     number(page.new_words),
-    shown(page.energy),
   ])
 );
 ```

@@ -129,7 +129,6 @@ def test_totals_follow_the_same_rules_as_the_dashboard(journal: Journal, vault: 
         "new_words": 5,
         "avg_sleep_hours": 7.0,
         "avg_screen_time_min": 90.0,
-        "avg_energy": 4.0,
     }
 
 
@@ -300,7 +299,8 @@ def test_weekly_review_from_the_real_template(journal: Journal, vault: Path) -> 
     assert values["learning_days"] == "2"
     assert values["tiktok_free_days"] == "1"
     assert values["avg_sleep_hours"] == "7.5"
-    assert values["avg_energy"] == ""
+    assert values["avg_screen_time_min"] == ""
+    assert "avg_energy" not in values
     assert "{{" not in text
     filled = sections(text)
     assert filled["Що вийшло"] == ["Два блоки ML."]
