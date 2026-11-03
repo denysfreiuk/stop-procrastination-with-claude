@@ -8,7 +8,6 @@ from discipline_bot.commands import (
     CommandError,
     one_line,
     parse_clock,
-    parse_duration,
     parse_hours,
     parse_minutes_and_text,
     parse_vocabulary,
@@ -67,20 +66,6 @@ def test_vocabulary_lines_round_trip() -> None:
     assert read_vocabulary_line("- reluctant — She was reluctant — really") == ("reluctant", "She was reluctant — really")
     assert read_vocabulary_line("- borrow") == ("borrow", "")
     assert read_vocabulary_line("lend") == ("lend", "")
-
-
-@pytest.mark.parametrize(
-    ("args", "minutes"),
-    [("95", 95), ("1:35", 95), ("1г35", 95), ("1h35", 95), ("2 год", 120), ("1 год 5 хв", 65), ("0", 0)],
-)
-def test_duration(args: str, minutes: int) -> None:
-    assert parse_duration(args, "") == minutes
-
-
-@pytest.mark.parametrize("args", ["багато", "1:2:3", "1441", "25:00"])
-def test_bad_duration(args: str) -> None:
-    with pytest.raises(CommandError):
-        parse_duration(args, "")
 
 
 @pytest.mark.parametrize(("args", "hours"), [("7.5", 7.5), ("7,5", 7.5), ("7:30", 7.5), ("8", 8.0), ("0", 0.0)])

@@ -15,7 +15,6 @@ from .commands import (
     CommandError,
     one_line,
     parse_clock,
-    parse_duration,
     parse_hours,
     parse_minutes_and_text,
     parse_vocabulary,
@@ -45,7 +44,6 @@ SET_UNDO = "workout"
 
 USAGE_FOCUS = "Приклад: /f 50 ML"
 USAGE_GYM = "Приклад: /gym 60 ноги"
-USAGE_SCREEN = "Приклад: /s 95 або /s 1:35"
 USAGE_SLEEP = "Приклад: /sleep 7.5"
 USAGE_WORDS = "Приклад: /w borrow, lend або /w reluctant: She was reluctant to leave"
 WORDS_QUESTION = """Які слова в Anki? Через кому: borrow, lend
@@ -61,8 +59,8 @@ SET_HINT = "Після підходу напиши вагу і повторен�
 
 BUTTON_ROWS = (
     ("🎯 Фокус", "📚 Вивчив", "🔤 Слова"),
-    ("😴 Сон", "📱 Екран", "📵 Тікток"),
-    ("🏋️ Зал", "🍽 Їжа", "📝 Нотатка"),
+    ("🏋️ Зал", "😴 Сон", "📵 Тікток"),
+    ("🍽 Їжа", "📝 Нотатка"),
     ("📊 Сьогодні", "↩️ Скасувати"),
 )
 HELP = """Будь-який текст іде в лог дня.
@@ -72,7 +70,6 @@ HELP = """Будь-який текст іде в лог дня.
 /w borrow, lend — слова в чергу на Anki
 /w reluctant: речення, де зустрів — слово з контекстом
 (ввечері /anki-from-notes у Claude Code дасть таблицю для вивчення)
-/s 95 — час екрана, хвилини
 /tt — зірвався на тікток
 /sleep 7.5 — сон, години
 /gym — тренування по підходах
@@ -169,7 +166,6 @@ class Assistant:
             "📚 Вивчив": self.learned,
             "🔤 Слова": self.words,
             "😴 Сон": self.sleep,
-            "📱 Екран": self.screen,
             "📵 Тікток": self.tiktok,
             "🏋️ Зал": self.gym,
             "🍽 Їжа": self.eat,
@@ -323,13 +319,6 @@ class Assistant:
 
     def _section(self, now: datetime, heading: str) -> list[str]:
         return section_lines(self.journal.read(now.date()) or "", heading)
-
-    def screen(self, args: str, now: datetime) -> Reply:
-        if not args.strip():
-            return self._ask(self.screen, "Скільки часу екрана? У хвилинах або 1:35", now)
-        minutes = parse_duration(args, USAGE_SCREEN)
-        self._write(Edit(now.date(), set_values={"screen_time_min": minutes}), f"екран {minutes} хв", now)
-        return Reply(f"✅ Екран: {minutes} хв")
 
     def tiktok(self, args: str, now: datetime) -> Reply:
         reason = one_line(args)

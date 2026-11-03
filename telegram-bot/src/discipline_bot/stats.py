@@ -34,7 +34,6 @@ class Goals:
 class Day:
     focus_blocks: int
     focus_minutes: int
-    screen_minutes: str
     relapse: bool
     sleep_hours: str
     gym: bool
@@ -50,7 +49,6 @@ def read_day(text: str | None) -> Day:
     return Day(
         focus_blocks=int(to_number(values.get("focus_blocks"))),
         focus_minutes=int(to_number(values.get("focus_minutes"))),
-        screen_minutes=values.get("screen_time_min", ""),
         relapse=values.get("tiktok_relapse") == "true",
         sleep_hours=values.get("sleep_hours", ""),
         gym=values.get("gym") == "true",
@@ -74,8 +72,6 @@ def filled(day: Day) -> list[str]:
         parts.append(f"📚 Вивчив: {day.learned}")
     if day.new_words:
         parts.append(f"🔤 Нових слів: {day.new_words}")
-    if day.screen_minutes:
-        parts.append(f"📱 Екран: {day.screen_minutes} хв")
     if day.relapse:
         parts.append("📵 Тікток: зрив")
     if day.sleep_hours:
@@ -92,7 +88,6 @@ def missing(day: Day) -> list[str]:
         "фокус": day.focus_minutes,
         "що вивчив": day.learned,
         "нові слова": day.has_words,
-        "екран": day.screen_minutes,
         "сон": day.sleep_hours,
         "їжа": day.has_food,
     }
@@ -197,10 +192,6 @@ def dashboard(read: ReadNote, today: date, goals: Goals, words_for_anki: int, wo
         ("📝", bool(section_lines(text, SUMMARY))),
     )
     done = sum(ok for _, ok in habits)
-
-    def shown(value: str, unit: str) -> str:
-        return f"{value} {unit}" if value else "—"
-
     return "\n".join(
         (
             " ".join(f"{icon}{'✅' if ok else '⬜'}" for icon, ok in habits),
@@ -209,8 +200,9 @@ def dashboard(read: ReadNote, today: date, goals: Goals, words_for_anki: int, wo
             "",
             f"🎯 Фокус: {day.focus_minutes} з {goals.focus_minutes:g} хв · блоків: {day.focus_blocks}",
             f"📚 Вивчив: {day.learned} · 🔤 Слів: {day.new_words} · 📥 На Anki: {words_for_anki}",
-            f"😴 Сон: {shown(day.sleep_hours, 'год')} · 🏋️ Зал: {f'{day.gym_minutes} хв' if day.gym else '—'}",
-            f"📱 Екран: {shown(day.screen_minutes, 'хв')} · 📵 Тікток: {'зрив' if day.relapse else 'без зривів'}",
+            f"😴 Сон: {f'{day.sleep_hours} год' if day.sleep_hours else '—'} · "
+            f"🏋️ Зал: {f'{day.gym_minutes} хв' if day.gym else '—'}",
+            f"📵 Тікток: {'зрив' if day.relapse else 'без зривів'}",
             "",
             f"🔥 Навчання поспіль: {streak(read, today, studied)} · 📵 Без тіктока: {tiktok_streak(read, today)}",
         )

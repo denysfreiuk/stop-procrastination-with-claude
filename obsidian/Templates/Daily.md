@@ -2,7 +2,6 @@
 date: "{{date:YYYY-MM-DD}}"
 focus_blocks: 0
 focus_minutes: 0
-screen_time_min:
 tiktok_relapse: false
 sleep_hours:
 gym: false

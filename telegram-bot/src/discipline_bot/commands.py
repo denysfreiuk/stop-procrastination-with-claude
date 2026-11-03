@@ -7,7 +7,6 @@ from datetime import time
 
 MAX_DAY_MINUTES = 1440
 _INTEGER = re.compile(r"^\d+$")
-_DURATION = re.compile(r"^(\d{1,2})\s*(?::|г|год|h)\s*(\d{1,2})?\s*(?:хв|m|min)?$", re.IGNORECASE)
 _CLOCK = re.compile(r"^(\d{1,2})[:.](\d{2})$")
 _WORD_SEPARATORS = re.compile(r"[,;\n]")
 # "word: context" or "word — context". A colon must be followed by a space, so links stay whole.
@@ -69,21 +68,6 @@ def read_vocabulary_line(line: str) -> tuple[str, str]:
     """The word and its context from a line of «Нові слова», written by the bot or by hand."""
     word, _, context = line.strip().removeprefix("- ").partition(NOTE_CONTEXT)
     return word.strip(), context.strip()
-
-
-def parse_duration(args: str, usage: str) -> int:
-    """Minutes: `95`, `1:35`, `1г35`, `1h35`, `2 год`."""
-    text = args.strip()
-    if _INTEGER.match(text):
-        minutes = int(text)
-    else:
-        match = _DURATION.match(text)
-        if not match:
-            raise CommandError(f"Не розумію час. {usage}")
-        minutes = int(match[1]) * 60 + int(match[2] or 0)
-    if minutes > MAX_DAY_MINUTES:
-        raise CommandError(f"У добі лише {MAX_DAY_MINUTES} хвилин. {usage}")
-    return minutes
 
 
 def parse_hours(args: str, usage: str) -> float:

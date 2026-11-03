@@ -6,7 +6,6 @@
     "date": "date",
     "focus_blocks": "number",
     "focus_minutes": "number",
-    "screen_time_min": "number",
     "tiktok_relapse": "checkbox",
     "sleep_hours": "number",
     "gym": "checkbox",
@@ -17,7 +16,6 @@
     "learning_days": "number",
     "tiktok_free_days": "number",
     "gym_days": "number",
-    "avg_sleep_hours": "number",
-    "avg_screen_time_min": "number"
+    "avg_sleep_hours": "number"
   }
 }

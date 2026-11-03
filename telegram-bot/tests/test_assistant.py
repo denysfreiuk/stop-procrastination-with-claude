@@ -161,13 +161,11 @@ def test_words_without_words_explain_the_format(assistant: Assistant) -> None:
     assert "двокрапки" in assistant.on_text("🔤 Слова", NOW).text
 
 
-def test_screen_and_sleep_overwrite(assistant: Assistant, journal: Journal) -> None:
-    assistant.screen("95", NOW)
-    assistant.screen("1:40", NOW)
+def test_sleep_overwrites(assistant: Assistant, journal: Journal) -> None:
     assistant.sleep("7,5", NOW)
     assistant.sleep("8", NOW)
-    assert values(journal)["screen_time_min"] == "100"
     assert values(journal)["sleep_hours"] == "8"
+    assert "screen_time_min" not in values(journal)
 
 
 def test_tiktok_asks_why_and_records_the_answer(assistant: Assistant, journal: Journal) -> None:
@@ -302,11 +300,11 @@ def test_button_then_answer(assistant: Assistant, journal: Journal, button: str,
 
 
 def test_a_wrong_answer_keeps_the_question_open(assistant: Assistant, journal: Journal) -> None:
-    assistant.on_text("📱 Екран", NOW)
+    assistant.on_text("😴 Сон", NOW)
     with pytest.raises(CommandError):
         assistant.on_text("багато", NOW)
-    assistant.on_text("95", NOW)
-    assert values(journal)["screen_time_min"] == "95"
+    assistant.on_text("7.5", NOW)
+    assert values(journal)["sleep_hours"] == "7.5"
 
 
 def test_an_old_question_expires_and_text_goes_to_the_log(assistant: Assistant, journal: Journal) -> None:
@@ -374,10 +372,10 @@ def test_lost_write_is_restored_after_the_delay(assistant: Assistant, journal: J
 
 
 def test_a_newer_value_is_not_taken_for_a_lost_one(assistant: Assistant, journal: Journal) -> None:
-    assistant.screen("95", NOW)
-    assistant.screen("120", NOW + timedelta(seconds=2))
+    assistant.sleep("7", NOW)
+    assistant.sleep("8", NOW + timedelta(seconds=2))
     assert assistant.confirm_writes(NOW + timedelta(seconds=30)) == []
-    assert values(journal)["screen_time_min"] == "120"
+    assert values(journal)["sleep_hours"] == "8"
 
 
 def test_today_and_streak_reports(assistant: Assistant) -> None:

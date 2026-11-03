@@ -49,10 +49,10 @@ def test_template_has_everything_the_bot_writes() -> None:
     for section in (FOCUS, LEARNED, WORDS, PHONE, GYM, FOOD, NOTE, LOG):
         assert f"## {section}\n" in template
     assert {
-        "focus_blocks", "focus_minutes", "screen_time_min", "tiktok_relapse", "sleep_hours",
+        "focus_blocks", "focus_minutes", "tiktok_relapse", "sleep_hours",
         "gym", "gym_minutes", "new_words", "anki_done",
     } <= properties(template).keys()
-    assert "energy" not in properties(template), "energy was dropped from the system"
+    assert not {"energy", "screen_time_min"} & properties(template).keys(), "both were dropped from the system"
 
 
 def test_render_template_variables() -> None:
@@ -116,9 +116,9 @@ def test_undo_keeps_what_the_user_added_meanwhile(journal: Journal) -> None:
 
 def test_undo_empties_a_value_that_was_empty(journal: Journal) -> None:
     journal.apply(Edit(DAY, ((LOG, "- 10:00 раніше"),)))
-    undo = journal.apply(Edit(DAY, set_values={"screen_time_min": 95}))
+    undo = journal.apply(Edit(DAY, set_values={"sleep_hours": 7.5}))
     journal.revert(undo)
-    assert "screen_time_min:\n" in journal.read(DAY)
+    assert "sleep_hours:\n" in journal.read(DAY)
 
 
 def test_windows_line_endings_are_kept(journal: Journal) -> None:

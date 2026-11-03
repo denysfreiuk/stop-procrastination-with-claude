@@ -59,17 +59,15 @@ dv.table(["Показник", "7 днів", "30 днів"], [
   ["Нових слів", ...both((pages) => sum(pages, "new_words"))],
   ["Днів у залі", ...both((pages) => countDays(pages, (page) => page.gym === true))],
   ["Сон, год (середнє)", ...both((pages) => average(pages, "sleep_hours"))],
-  ["Екран, хв (середнє)", ...both((pages) => average(pages, "screen_time_min"))],
 ]);
 
 dv.header(2, "Останні 14 днів");
 const shown = (value) => (isFilled(value) ? value : "—");
 dv.table(
-  ["День", "Фокус", "Екран", "Тікток", "Сон", "Зал", "Слова"],
+  ["День", "Фокус", "Тікток", "Сон", "Зал", "Слова"],
   lastDays(14).map((page) => [
     page.file.link,
     number(page.focus_minutes),
-    shown(page.screen_time_min),
     page.tiktok_relapse === true ? "зрив" : "—",
     shown(page.sleep_hours),
     page.gym === true ? number(page.gym_minutes) : "—",
