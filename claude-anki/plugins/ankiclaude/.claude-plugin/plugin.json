@@ -1,7 +1,7 @@
 {
   "name": "ankiclaude",
   "displayName": "Anki&Claude",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "Створює, редагує та організовує картки Anki за принципами інтервальних повторень, активного пригадування і навчання в контексті (через AnkiConnect), а також робить підсумки дня, тижневі огляди й картки зі щоденника Obsidian.",
   "author": {
     "name": "Denys Freiuk",

@@ -4,6 +4,8 @@ focus_blocks: 0
 focus_minutes: 0
 tiktok_relapse: false
 sleep_hours:
+bedtime:
+wake_time:
 gym: false
 gym_minutes: 0
 new_words: 0

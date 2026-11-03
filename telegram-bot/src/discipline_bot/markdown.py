@@ -12,6 +12,7 @@ import re
 KEY_LINE = re.compile(r"^([A-Za-z_][\w-]*):[ \t]*(.*?)[ \t]*$")
 TOP_HEADING = re.compile(r"^#{1,2}\s")
 LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+\.)\s+\S")
+_TIMED = re.compile(r"^- (\d{2}:\d{2})\b")
 FENCE = "```"
 
 
@@ -91,6 +92,21 @@ def append_line(text: str, heading: str, line: str) -> str:
         position -= 1
     lines.insert(position, line)
     return "\n".join(lines)
+
+
+def insert_by_time(text: str, heading: str, line: str) -> str:
+    """Like append_line, but a line about an earlier time goes before the later ones: `- 08:30 …`."""
+    new = _TIMED.match(line)
+    lines = text.split("\n")
+    span = _section_span(lines, heading)
+    if new is None or span is None:
+        return append_line(text, heading, line)
+    for index in range(span[0] + 1, span[1]):
+        match = _TIMED.match(lines[index])
+        if match and match[1] > new[1]:
+            lines.insert(index, line)
+            return "\n".join(lines)
+    return append_line(text, heading, line)
 
 
 def section_lines(text: str, heading: str) -> list[str]:

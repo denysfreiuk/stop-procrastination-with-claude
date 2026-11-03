@@ -36,6 +36,8 @@ class Day:
     focus_minutes: int
     relapse: bool
     sleep_hours: str
+    bedtime: str
+    wake_time: str
     gym: bool
     gym_minutes: int
     new_words: int
@@ -51,6 +53,8 @@ def read_day(text: str | None) -> Day:
         focus_minutes=int(to_number(values.get("focus_minutes"))),
         relapse=values.get("tiktok_relapse") == "true",
         sleep_hours=values.get("sleep_hours", ""),
+        bedtime=values.get("bedtime", ""),
+        wake_time=values.get("wake_time", ""),
         gym=values.get("gym") == "true",
         gym_minutes=int(to_number(values.get("gym_minutes"))),
         new_words=int(to_number(values.get("new_words"))),
@@ -163,6 +167,13 @@ def gym_days(read: ReadNote, today: date, days: int = 7) -> int:
     return sum(read_day(read(today - timedelta(days=offset))).gym for offset in range(days))
 
 
+def sleep_text(day: Day) -> str:
+    if not day.sleep_hours:
+        return "—"
+    times = f" ({day.bedtime} → {day.wake_time})" if day.bedtime and day.wake_time else ""
+    return f"{day.sleep_hours} год{times}"
+
+
 def habit_goals(habits_page: str) -> Goals:
     """The goals the habit tracker page uses, so the dashboard ticks the same habits."""
     focus = _FOCUS_GOAL.search(habits_page)
@@ -173,11 +184,13 @@ def habit_goals(habits_page: str) -> Goals:
     )
 
 
-def dashboard(read: ReadNote, today: date, goals: Goals, words_for_anki: int, workout: str | None = None) -> str:
+def dashboard(
+    read: ReadNote, today: date, goals: Goals, words_for_anki: int, going_on: Iterable[str] = ()
+) -> str:
     """The pinned message: today's habits as on the Звички page, then the numbers behind them.
 
     The first line is the habits alone, because the pinned bar in Telegram shows only the start.
-    `workout` is a line about a workout that is still going.
+    `going_on` are lines about what is happening right now: a workout, sleep.
     """
     text = read(today) or ""
     day = read_day(text)
@@ -196,12 +209,11 @@ def dashboard(read: ReadNote, today: date, goals: Goals, words_for_anki: int, wo
         (
             " ".join(f"{icon}{'✅' if ok else '⬜'}" for icon, ok in habits),
             f"{format_day(today)}, {WEEKDAYS[today.weekday()]} · {done} з {len(habits)}",
-            *((workout,) if workout else ()),
+            *going_on,
             "",
             f"🎯 Фокус: {day.focus_minutes} з {goals.focus_minutes:g} хв · блоків: {day.focus_blocks}",
             f"📚 Вивчив: {day.learned} · 🔤 Слів: {day.new_words} · 📥 На Anki: {words_for_anki}",
-            f"😴 Сон: {f'{day.sleep_hours} год' if day.sleep_hours else '—'} · "
-            f"🏋️ Зал: {f'{day.gym_minutes} хв' if day.gym else '—'}",
+            f"😴 Сон: {sleep_text(day)} · 🏋️ Зал: {f'{day.gym_minutes} хв' if day.gym else '—'}",
             f"📵 Тікток: {'зрив' if day.relapse else 'без зривів'}",
             "",
             f"🔥 Навчання поспіль: {streak(read, today, studied)} · 📵 Без тіктока: {tiktok_streak(read, today)}",

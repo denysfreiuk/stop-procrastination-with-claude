@@ -12,7 +12,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from .files import atomic_write
-from .markdown import append_line, properties, remove_line, render_value, section_lines, set_property
+from .markdown import append_line, insert_by_time, properties, remove_line, render_value, section_lines, set_property
 
 DAILY_FOLDER = Path("Journal") / "Daily"
 TEMPLATE = Path("Templates") / "Daily.md"
@@ -50,6 +50,7 @@ class Edit:
     lines: tuple[tuple[str, str], ...] = ()  # (section, line)
     set_values: Mapping[str, object] = field(default_factory=dict)
     add_values: Mapping[str, int] = field(default_factory=dict)
+    by_time: bool = False  # put `- HH:MM` lines in time order instead of at the end
 
 
 @dataclass(frozen=True)
@@ -187,7 +188,7 @@ class Journal:
                 total = to_number(values.get(key)) + amount
                 text = set_property(text, key, render_value(total))
             for section, line in edit.lines:
-                text = append_line(text, section, line)
+                text = (insert_by_time if edit.by_time else append_line)(text, section, line)
             return text
 
         self._update(edit.day, change, f"Бот: {label}" if label else "")
@@ -215,5 +216,5 @@ class Journal:
             return False
         whole_edit_lost = bool(edit.lines) and len(missing) == len(edit.lines)
         add_values = edit.add_values if whole_edit_lost else {}
-        self.apply(Edit(edit.day, missing, wrong, add_values), "відновлено втрачений запис")
+        self.apply(Edit(edit.day, missing, wrong, add_values, edit.by_time), "відновлено втрачений запис")
         return True

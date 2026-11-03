@@ -161,6 +161,68 @@ def test_words_without_words_explain_the_format(assistant: Assistant) -> None:
     assert "двокрапки" in assistant.on_text("🔤 Слова", NOW).text
 
 
+def test_sleep_from_bedtime_to_getting_up(make_assistant: Callable[[], Assistant], journal: Journal) -> None:
+    night = NOW.replace(hour=23, minute=40) - timedelta(days=1)
+    assert make_assistant().on_text("😴 Сон", night).text.startswith("😴 Ліг о 23:40")
+    restarted = make_assistant()
+    assert "😴 Спиш з 23:40" in restarted.dashboard_due(night + timedelta(hours=1)).text
+    morning = NOW.replace(hour=7, minute=10)
+    reply = restarted.on_text("😴 Сон", morning)
+    assert reply.text == "☀️ Доброго ранку! Спав 7 год 30 хв (23:40 → 07:10)"
+    assert (values(journal)["sleep_hours"], values(journal)["bedtime"], values(journal)["wake_time"]) == ("7.5", "23:40", "07:10")
+    assert "😴 Сон: 7.5 год (23:40 → 07:10)" in restarted.dashboard_due(morning).text
+    assert restarted.state.asleep_since is None
+
+
+def test_a_slip_cancels_bedtime_and_a_forgotten_morning_starts_over(assistant: Assistant, journal: Journal) -> None:
+    assistant.on_text("😴 Сон", NOW)
+    assert "Скасував відбій" in assistant.on_text("😴 Сон", NOW + timedelta(minutes=5)).text
+    assert assistant.state.asleep_since is None
+    assistant.on_text("😴 Сон", NOW)
+    reply = assistant.on_text("😴 Сон", NOW + timedelta(hours=20))
+    assert reply.text.startswith("Учорашній відбій без підйому не рахую.\n😴 Ліг о 10:32")
+    assert journal.read(DAY) is None
+    assert assistant.undo("", NOW).text == "↩️ Скасовано: відбій о 10:32"
+    assert assistant.state.asleep_since is None
+
+
+def test_sleep_written_afterwards(assistant: Assistant, journal: Journal) -> None:
+    assert assistant.sleep("23:40 7:10", NOW).text == "✅ Спав 7 год 30 хв (23:40 → 07:10)"
+    assert values(journal)["bedtime"] == "23:40"
+    assistant.sleep("1:15-8:00", NOW)
+    assert values(journal)["sleep_hours"] == "6.75"
+    with pytest.raises(CommandError, match="ще не було"):
+        assistant.sleep("23:00 18:00", NOW)
+    with pytest.raises(CommandError, match="до 16 годин"):
+        assistant.sleep("14:00 13:00", NOW)
+
+
+def test_food_with_its_own_time_lands_in_order(assistant: Assistant, journal: Journal) -> None:
+    assert assistant.eat("борщ, хліб", NOW).text == "✅ 14:32 борщ, хліб"
+    assert assistant.eat("8:30 вівсянка з бананом", NOW).text == "✅ 08:30 вівсянка з бананом"
+    assistant.eat("12.05 курка 200г, рис 150г", NOW)
+    assert section(journal, FOOD) == ["- 08:30 вівсянка з бананом", "- 12:05 курка 200г, рис 150г", "- 14:32 борщ, хліб"]
+    with pytest.raises(CommandError, match="ще не було"):
+        assistant.eat("20:00 піца", NOW)
+    assistant.undo("", NOW)
+    assert section(journal, FOOD) == ["- 08:30 вівсянка з бананом", "- 14:32 борщ, хліб"]
+
+
+def test_a_late_dinner_after_midnight_is_yesterdays(assistant: Assistant, journal: Journal) -> None:
+    assistant.eat("23:50 піца", NOW.replace(hour=0, minute=20) + timedelta(days=1))
+    assert section(journal, FOOD) == ["- 23:50 піца"]
+
+
+def test_recent_foods_are_one_tap(assistant: Assistant, journal: Journal) -> None:
+    assistant.eat("вівсянка", NOW)
+    assistant.eat("8:00 борщ", NOW)
+    assistant.eat("Вівсянка", NOW)
+    reply = assistant.on_text("🍽 Їжа", NOW)
+    assert [label for row in reply.buttons for label, _ in row] == ["Вівсянка", "борщ"]
+    assistant.on_button(reply.buttons[0][1][1], NOW + timedelta(hours=1))
+    assert section(journal, FOOD)[-1] == "- 15:32 борщ"
+
+
 def test_sleep_overwrites(assistant: Assistant, journal: Journal) -> None:
     assistant.sleep("7,5", NOW)
     assistant.sleep("8", NOW)
@@ -300,11 +362,11 @@ def test_button_then_answer(assistant: Assistant, journal: Journal, button: str,
 
 
 def test_a_wrong_answer_keeps_the_question_open(assistant: Assistant, journal: Journal) -> None:
-    assistant.on_text("😴 Сон", NOW)
+    assistant.on_text("🎯 Фокус", NOW)
     with pytest.raises(CommandError):
         assistant.on_text("багато", NOW)
-    assistant.on_text("7.5", NOW)
-    assert values(journal)["sleep_hours"] == "7.5"
+    assistant.on_text("50 ML", NOW)
+    assert values(journal)["focus_minutes"] == "50"
 
 
 def test_an_old_question_expires_and_text_goes_to_the_log(assistant: Assistant, journal: Journal) -> None:

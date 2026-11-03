@@ -8,6 +8,8 @@
     "focus_minutes": "number",
     "tiktok_relapse": "checkbox",
     "sleep_hours": "number",
+    "bedtime": "text",
+    "wake_time": "text",
     "gym": "checkbox",
     "gym_minutes": "number",
     "new_words": "number",

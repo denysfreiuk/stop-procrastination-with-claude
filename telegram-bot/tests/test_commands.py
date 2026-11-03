@@ -10,9 +10,11 @@ from discipline_bot.commands import (
     parse_clock,
     parse_hours,
     parse_minutes_and_text,
+    parse_sleep_times,
     parse_vocabulary,
     parse_words,
     read_vocabulary_line,
+    split_clock,
     vocabulary_line,
 )
 
@@ -77,6 +79,23 @@ def test_hours(args: str, hours: float) -> None:
 def test_bad_hours(args: str) -> None:
     with pytest.raises(CommandError):
         parse_hours(args, "")
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [("8:30 вівсянка", (time(8, 30), "вівсянка")), ("12.05 курка 200г", (time(12, 5), "курка 200г")),
+     ("борщ", (None, "борщ")), ("25:00 щось", (None, "25:00 щось")), ("1.5 кг яблук", (None, "1.5 кг яблук"))],
+)
+def test_a_meal_may_start_with_its_time(text: str, expected: tuple) -> None:
+    assert split_clock(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [("23:40 7:10", (time(23, 40), time(7, 10))), ("1.15-8.00", (time(1, 15), time(8, 0))), ("7.5", None)],
+)
+def test_sleep_times(text: str, expected: tuple | None) -> None:
+    assert parse_sleep_times(text, "") == expected
 
 
 @pytest.mark.parametrize(("text", "expected"), [("20:00", time(20, 0)), ("8:05", time(8, 5)), ("21.30", time(21, 30))])

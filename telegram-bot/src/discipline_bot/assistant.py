@@ -17,8 +17,10 @@ from .commands import (
     parse_clock,
     parse_hours,
     parse_minutes_and_text,
+    parse_sleep_times,
     parse_vocabulary,
     read_vocabulary_line,
+    split_clock,
     vocabulary_line,
 )
 from .config import set_env_value
@@ -37,14 +39,21 @@ DASHBOARD_EVERY = timedelta(minutes=1)
 WORKOUT_IDLE = timedelta(hours=2)
 MAX_TOPICS = 5
 MAX_EXERCISES = 8
+MAX_FOODS = 6
 MAX_UNDO = 20
 MAX_FOCUS_MINUTES = 720
-# An undo step for a set of the workout: sets reach the note only when the workout ends.
+# A second press of 😴 sooner than this is a slip of the finger; later than the longest sleep, a forgotten morning.
+SHORTEST_SLEEP = timedelta(minutes=30)
+LONGEST_SLEEP = timedelta(hours=16)
+# Undo steps that change no file: a set of the workout reaches the note only when the workout ends,
+# and a bedtime only together with the getting up.
 SET_UNDO = "workout"
+BEDTIME_UNDO = "bedtime"
 
 USAGE_FOCUS = "Приклад: /f 50 ML"
 USAGE_GYM = "Приклад: /gym 60 ноги"
-USAGE_SLEEP = "Приклад: /sleep 7.5"
+USAGE_SLEEP = "Приклад: /sleep 23:40 7:10 або /sleep 7.5"
+FOOD_QUESTION = "Що їв? Якщо не щойно — з часом: 8:30 вівсянка"
 USAGE_WORDS = "Приклад: /w borrow, lend або /w reluctant: She was reluctant to leave"
 WORDS_QUESTION = """Які слова в Anki? Через кому: borrow, lend
 
@@ -71,10 +80,11 @@ HELP = """Будь-який текст іде в лог дня.
 /w reluctant: речення, де зустрів — слово з контекстом
 (ввечері /anki-from-notes у Claude Code дасть таблицю для вивчення)
 /tt — зірвався на тікток
-/sleep 7.5 — сон, години
+/sleep — ліг спати; ще раз — встав (або кнопка 😴 Сон)
+/sleep 23:40 7:10 — сон заднім числом, якщо забув натиснути
 /gym — тренування по підходах
 /gym 60 ноги — зал одним рядком
-/eat текст — їжа
+/eat борщ — їжа; /eat 8:30 вівсянка — якщо їв раніше
 /n текст — нотатка дня
 /today — підсумок дня
 /streak — стріки
@@ -132,6 +142,9 @@ class State:
         self.dashboard_text: str | None = data.get("dashboard_text")
         self.exercises: list[str] = data.get("exercises", [])
         self.workout: Workout | None = Workout.from_dict(data["workout"]) if data.get("workout") else None
+        self.foods: list[str] = data.get("foods", [])
+        asleep = data.get("asleep_since")
+        self.asleep_since: datetime | None = datetime.fromisoformat(asleep) if asleep else None
 
     def save(self) -> None:
         data = {
@@ -142,6 +155,8 @@ class State:
             "dashboard_text": self.dashboard_text,
             "exercises": self.exercises,
             "workout": self.workout.to_dict() if self.workout else None,
+            "foods": self.foods,
+            "asleep_since": self.asleep_since.isoformat() if self.asleep_since else None,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(self.path, json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
@@ -215,6 +230,8 @@ class Assistant:
             return self._workout_button(value, now)
         if kind == "exercise" and self.state.workout:
             return self._start_exercise(self.state.exercises[int(value)], now)
+        if kind == "food":
+            return self.eat(self.state.foods[int(value)], now)
         return Reply("Ця кнопка вже не працює.")
 
     def _ask(self, handler: Handler, question: str, now: datetime, buttons: Buttons = ()) -> Reply:
@@ -336,12 +353,52 @@ class Assistant:
         return Reply("✅ Причину записав")
 
     def sleep(self, args: str, now: datetime) -> Reply:
+        """😴 when going to bed and again when getting up; or the times, or the hours, afterwards."""
         if not args.strip():
-            options = tuple((value, f"sleep:{value}") for value in ("6", "6.5", "7", "7.5", "8", "8.5"))
-            return self._ask(self.sleep, "Скільки спав?", now, (options[:3], options[3:]))
+            return self._bed_or_up(now)
+        times = parse_sleep_times(args, USAGE_SLEEP)
+        if times:
+            bed_time, up_time = times
+            up = now.replace(hour=up_time.hour, minute=up_time.minute, second=0, microsecond=0)
+            if up > now:
+                raise CommandError(f"О {up_time:%H:%M} ще не було. {USAGE_SLEEP}")
+            bed = up.replace(hour=bed_time.hour, minute=bed_time.minute)
+            if bed >= up:
+                bed -= timedelta(days=1)
+            return self._save_sleep(bed, up, now)
         hours = parse_hours(args, USAGE_SLEEP)
         self._write(Edit(now.date(), set_values={"sleep_hours": hours}), f"сон {hours:g} год", now)
         return Reply(f"✅ Сон: {hours:g} год")
+
+    def _bed_or_up(self, now: datetime) -> Reply:
+        since = self.state.asleep_since
+        if since is not None and now - since < SHORTEST_SLEEP:
+            self._forget_bedtime()
+            return Reply("↩️ Скасував відбій: минуло менше пів години. Лягаєш — натисни 😴 Сон ще раз.")
+        if since is not None and now - since <= LONGEST_SLEEP:
+            return self._save_sleep(since, now, now)
+        forgotten = "Учорашній відбій без підйому не рахую.\n" if since is not None else ""
+        self.state.asleep_since = now
+        self.state.undo = [*self.state.undo, Undo(BEDTIME_UNDO, (), {}, f"відбій о {clock(now)}")][-MAX_UNDO:]
+        self.state.save()
+        return Reply(f"{forgotten}😴 Ліг о {clock(now)}. Добраніч! Коли встанеш — знову 😴 Сон.")
+
+    def _forget_bedtime(self) -> None:
+        self.state.asleep_since = None
+        self.state.undo = [item for item in self.state.undo if item.day != BEDTIME_UNDO]
+        self.state.save()
+
+    def _save_sleep(self, bed: datetime, up: datetime, now: datetime) -> Reply:
+        """The night belongs to the day of getting up, as `sleep_hours` is last night's sleep."""
+        minutes = round((up - bed).total_seconds() / 60)
+        if not 0 < minutes <= LONGEST_SLEEP.total_seconds() / 60:
+            raise CommandError(f"Сон має бути до {LONGEST_SLEEP.total_seconds() / 3600:g} годин. {USAGE_SLEEP}")
+        self._forget_bedtime()
+        hours = round(minutes / 60, 2)
+        values = {"sleep_hours": hours, "bedtime": clock(bed), "wake_time": clock(up)}
+        self._write(Edit(up.date(), set_values=values), f"сон {clock(bed)}–{clock(up)}", now)
+        greeting = "☀️ Доброго ранку! " if up == now else "✅ "
+        return Reply(f"{greeting}Спав {minutes // 60} год {minutes % 60:02d} хв ({clock(bed)} → {clock(up)})")
 
     def gym(self, args: str, now: datetime) -> Reply:
         if not args.strip():
@@ -457,12 +514,28 @@ class Assistant:
         line = f"🏋️ Тренування з {clock(workout.started)} · підходів: {len(workout.sets)}"
         return line + (" · пауза" if workout.paused else "")
 
+    def sleep_line(self) -> str | None:
+        since = self.state.asleep_since
+        return f"😴 Спиш з {clock(since)}" if since else None
+
     def eat(self, args: str, now: datetime) -> Reply:
-        entry = one_line(args)
+        """What was eaten and when: now, or `8:30 вівсянка` for a meal written down later."""
+        at, entry = split_clock(one_line(args))
         if not entry:
-            return self._ask(self.eat, "Що їв?", now)
-        self._write(Edit(now.date(), ((FOOD, f"- {clock(now)} {entry}"),)), f"їжа: {entry}", now)
-        return Reply("✅ Записав їжу")
+            foods = [(food[:30], f"food:{index}") for index, food in enumerate(self.state.foods)]
+            rows = tuple(tuple(foods[start : start + 2]) for start in range(0, len(foods), 2))
+            return self._ask(self.eat, FOOD_QUESTION, now, rows)
+        day = now.date()
+        if at is not None and at > now.time():
+            # Just after midnight, a late dinner is still yesterday's.
+            if now.hour >= 4:
+                raise CommandError(f"О {at:%H:%M} ще не було. Час пиши той, коли їв.")
+            day -= timedelta(days=1)
+        moment = f"{at:%H:%M}" if at else clock(now)
+        self._write(Edit(day, ((FOOD, f"- {moment} {entry}"),), by_time=True), f"їжа: {entry}", now)
+        self.state.foods = [entry, *(food for food in self.state.foods if food.lower() != entry.lower())][:MAX_FOODS]
+        self.state.save()
+        return Reply(f"✅ {moment} {entry}")
 
     def note(self, args: str, now: datetime) -> Reply:
         entry = one_line(args)
@@ -486,6 +559,8 @@ class Assistant:
         if last.day == SET_UNDO:
             if self.state.workout and self.state.workout.sets:
                 self.state.workout.sets.pop()
+        elif last.day == BEDTIME_UNDO:
+            self.state.asleep_since = None
         else:
             self.journal.revert(last)
             self.unconfirmed = [item for item in self.unconfirmed if item.edit.lines != last.lines]
@@ -529,7 +604,8 @@ class Assistant:
         self.dashboard_dirty = False
         self.dashboard_checked = now
         goals = stats.habit_goals(self.journal.read_page(HABITS_PAGE))
-        text = stats.dashboard(self.journal.read, now.date(), goals, self.words_for_anki(), self.workout_line())
+        going_on = [line for line in (self.workout_line(), self.sleep_line()) if line]
+        text = stats.dashboard(self.journal.read, now.date(), goals, self.words_for_anki(), going_on)
         message = self.state.dashboard_message
         if renew or message is None:
             return DashboardUpdate(text, None, message)

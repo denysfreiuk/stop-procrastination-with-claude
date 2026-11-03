@@ -8,6 +8,8 @@ from datetime import time
 MAX_DAY_MINUTES = 1440
 _INTEGER = re.compile(r"^\d+$")
 _CLOCK = re.compile(r"^(\d{1,2})[:.](\d{2})$")
+_LEADING_CLOCK = re.compile(r"^(\d{1,2})[:.](\d{2})\s+(\S.*)$")
+_TWO_CLOCKS = re.compile(r"^(\d{1,2}[:.]\d{2})\s*(?:[-–—]|\s)\s*(\d{1,2}[:.]\d{2})$")
 _WORD_SEPARATORS = re.compile(r"[,;\n]")
 # "word: context" or "word — context". A colon must be followed by a space, so links stay whole.
 _CONTEXT = re.compile(r"^(.*?)\s*(?::\s|\s[—–-]\s)\s*(.+)$")
@@ -83,8 +85,24 @@ def parse_hours(args: str, usage: str) -> float:
     return round(hours, 2)
 
 
-def parse_clock(text: str) -> time:
+def parse_clock(text: str, usage: str = "Час пиши так: /remind 20:00") -> time:
     match = _CLOCK.match(text.strip())
     if match and int(match[1]) < 24 and int(match[2]) < 60:
         return time(int(match[1]), int(match[2]))
-    raise CommandError("Час пиши так: /remind 20:00")
+    raise CommandError(usage)
+
+
+def split_clock(text: str) -> tuple[time | None, str]:
+    """`8:30 вівсянка` → (08:30, `вівсянка`): an entry written later than it happened."""
+    match = _LEADING_CLOCK.match(text.strip())
+    if match and int(match[1]) < 24 and int(match[2]) < 60:
+        return time(int(match[1]), int(match[2])), match[3].strip()
+    return None, text.strip()
+
+
+def parse_sleep_times(text: str, usage: str) -> tuple[time, time] | None:
+    """`23:40 7:10` or `23:40-7:10`: when the user went to bed and got up; None for anything else."""
+    match = _TWO_CLOCKS.match(text.strip())
+    if not match:
+        return None
+    return parse_clock(match[1], usage), parse_clock(match[2], usage)
