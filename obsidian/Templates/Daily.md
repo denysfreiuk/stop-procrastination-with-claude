@@ -9,6 +9,8 @@ wake_time:
 gym: false
 gym_minutes: 0
 new_words: 0
+kcal:
+protein_g:
 anki_done: false
 ---
 ## Фокус

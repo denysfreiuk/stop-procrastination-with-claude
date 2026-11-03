@@ -21,6 +21,7 @@ _IN_ANKI_LINE = re.compile(r"^- (\d{4}-\d{2}-\d{2}) · (.+?)\s*$")
 # The goals live in Звички.md, in the line `const GOALS = { focusMinutes: 50, sleepHours: 7 };`.
 _FOCUS_GOAL = re.compile(r"\bfocusMinutes:\s*(\d+(?:\.\d+)?)")
 _SLEEP_GOAL = re.compile(r"\bsleepHours:\s*(\d+(?:\.\d+)?)")
+_MEAL_TIME = re.compile(r"^- (\d{2}:\d{2})\b")
 ReadNote = Callable[[date], "str | None"]
 
 
@@ -44,10 +45,16 @@ class Day:
     learned: int
     has_words: bool
     has_food: bool
+    meals: int
+    last_meal: str
+    kcal: str  # Claude's estimates from /journal
+    protein_g: str
 
 
 def read_day(text: str | None) -> Day:
     values = properties(text or "")
+    meals = list_items(text or "", FOOD)
+    times = [match[1] for line in meals if (match := _MEAL_TIME.match(line))]
     return Day(
         focus_blocks=int(to_number(values.get("focus_blocks"))),
         focus_minutes=int(to_number(values.get("focus_minutes"))),
@@ -61,6 +68,10 @@ def read_day(text: str | None) -> Day:
         learned=len(list_items(text or "", LEARNED)),
         has_words=bool(section_lines(text or "", WORDS)),
         has_food=bool(section_lines(text or "", FOOD)),
+        meals=len(meals),
+        last_meal=max(times, default=""),
+        kcal=values.get("kcal", ""),
+        protein_g=values.get("protein_g", ""),
     )
 
 
@@ -167,6 +178,17 @@ def gym_days(read: ReadNote, today: date, days: int = 7) -> int:
     return sum(read_day(read(today - timedelta(days=offset))).gym for offset in range(days))
 
 
+def food_text(day: Day) -> str:
+    if not day.meals:
+        return "—"
+    parts = [str(day.meals)]
+    if day.last_meal:
+        parts.append(f"остання о {day.last_meal}")
+    if day.kcal:
+        parts.append(f"~{day.kcal} ккал" + (f", білка ~{day.protein_g} г" if day.protein_g else ""))
+    return " · ".join(parts)
+
+
 def sleep_text(day: Day) -> str:
     if not day.sleep_hours:
         return "—"
@@ -214,6 +236,7 @@ def dashboard(
             f"🎯 Фокус: {day.focus_minutes} з {goals.focus_minutes:g} хв · блоків: {day.focus_blocks}",
             f"📚 Вивчив: {day.learned} · 🔤 Слів: {day.new_words} · 📥 На Anki: {words_for_anki}",
             f"😴 Сон: {sleep_text(day)} · 🏋️ Зал: {f'{day.gym_minutes} хв' if day.gym else '—'}",
+            f"🍽 Їжа: {food_text(day)}",
             f"📵 Тікток: {'зрив' if day.relapse else 'без зривів'}",
             "",
             f"🔥 Навчання поспіль: {streak(read, today, studied)} · 📵 Без тіктока: {tiktok_streak(read, today)}",

@@ -112,10 +112,18 @@ def test_dashboard_ticks_the_habits_of_the_tracker_page() -> None:
     assert lines[-1] == "🔥 Навчання поспіль: 2 · 📵 Без тіктока: 2"
 
 
+def test_dashboard_counts_meals_and_shows_the_estimate() -> None:
+    today = "---\nkcal: 2100\nprotein_g: 120\n---\n## Їжа\n- 08:30 вівсянка\n- 13:05 борщ\n- 10:00 банан\n"
+    lines = stats.dashboard(reader({0: today}), DAY, stats.Goals(), 0).split("\n")
+    assert "🍽 Їжа: 3 · остання о 13:05 · ~2100 ккал, білка ~120 г" in lines
+    lines = stats.dashboard(reader({0: "## Їжа\n- 08:30 вівсянка\n"}), DAY, stats.Goals(), 0).split("\n")
+    assert "🍽 Їжа: 1 · остання о 08:30" in lines
+
+
 def test_dashboard_of_a_day_without_a_note() -> None:
     text = stats.dashboard(reader({}), DAY, stats.Goals(), words_for_anki=0)
     assert text.startswith("📵✅ 🎯⬜ 📚⬜ 🔤⬜ 🏋️⬜ 😴⬜ 📝⬜\n30 жовтня, пʼятниця · 1 з 7")
-    assert "😴 Сон: — · 🏋️ Зал: —" in text
+    assert "😴 Сон: — · 🏋️ Зал: —\n🍽 Їжа: —" in text
 
 
 def test_words_for_anki_skip_the_ones_the_study_page_lists() -> None:

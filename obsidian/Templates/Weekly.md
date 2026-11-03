@@ -7,6 +7,8 @@ tiktok_free_days:
 gym_days:
 new_words:
 avg_sleep_hours:
+avg_kcal:
+avg_protein_g:
 ---
 ## Що вийшло
 

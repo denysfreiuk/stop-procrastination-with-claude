@@ -13,11 +13,15 @@
     "gym": "checkbox",
     "gym_minutes": "number",
     "new_words": "number",
+    "kcal": "number",
+    "protein_g": "number",
     "anki_done": "checkbox",
     "week": "text",
     "learning_days": "number",
     "tiktok_free_days": "number",
     "gym_days": "number",
-    "avg_sleep_hours": "number"
+    "avg_sleep_hours": "number",
+    "avg_kcal": "number",
+    "avg_protein_g": "number"
   }
 }

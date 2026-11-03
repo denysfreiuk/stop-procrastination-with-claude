@@ -15,7 +15,8 @@ async def test_tools_are_registered(fake: FakeAnkiConnect, make_anki) -> None:
                  "find_notes", "check_duplicates", "get_leeches", "get_stats", "read_journal", "read_word_queue"}
     writes = {"sync", "setup_decks", "create_deck", "set_deck_options", "ensure_note_types", "add_notes",
               "update_note_fields", "add_tags", "remove_tags", "delete_notes", "promote_cards",
-              "add_day_summary", "mark_anki_done", "save_weekly_review", "save_study_table", "mark_words_in_anki"}
+              "add_day_summary", "mark_anki_done", "save_weekly_review", "save_study_table", "mark_words_in_anki",
+              "save_food_estimate"}
     assert set(tools) == read_only | writes
     for name in read_only:
         assert tools[name].annotations.read_only_hint is True, name

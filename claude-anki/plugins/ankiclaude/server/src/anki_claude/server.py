@@ -263,6 +263,16 @@ def build_server(get_anki: Callable[[], Anki]) -> MCPServer:
         return in_journal(lambda journal: journal.add_summary(date, summary))
 
     @server.tool(annotations=WRITES)
+    async def save_food_estimate(
+        date: str,
+        kcal: Annotated[int, Field(gt=0, le=10000)],
+        protein_g: Annotated[int, Field(ge=0, le=500)],
+    ) -> dict[str, Any]:
+        """Записує оцінку їжі дня (YYYY-MM-DD) в Properties kcal і protein_g щоденної нотатки:
+        калорії й білок за записами розділу «Їжа». Інших змін у нотатці не робить."""
+        return in_journal(lambda journal: journal.save_food_estimate(date, kcal, protein_g))
+
+    @server.tool(annotations=WRITES)
     async def mark_anki_done(dates: list[str]) -> dict[str, Any]:
         """Ставить anki_done: true у щоденних нотатках (YYYY-MM-DD). Викликай лише для днів,
         матеріал яких повністю оброблено: картки додано або користувач явно їх відхилив."""

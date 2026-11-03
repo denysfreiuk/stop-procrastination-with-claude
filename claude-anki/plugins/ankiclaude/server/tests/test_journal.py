@@ -128,7 +128,24 @@ def test_totals_follow_the_same_rules_as_the_dashboard(journal: Journal, vault: 
         "gym_days": 1,
         "new_words": 5,
         "avg_sleep_hours": 7.0,
+        "avg_kcal": None,
+        "avg_protein_g": None,
     }
+
+
+def test_the_food_estimate_sets_two_properties_and_feeds_the_averages(journal: Journal, vault: Path) -> None:
+    path = write_note(vault, TODAY)
+    write_note(vault, TODAY - timedelta(days=1))
+    before = path.read_text(encoding="utf-8")
+    journal.save_food_estimate("2026-10-30", 2100, 120)
+    journal.save_food_estimate("2026-10-30", 2150, 125)
+    assert path.read_text(encoding="utf-8") == before.replace("my_key: моє\n", "my_key: моє\nkcal: 2150\nprotein_g: 125\n")
+    totals = journal.read(last_notes=7)["totals"]
+    assert (totals["avg_kcal"], totals["avg_protein_g"]) == (2150.0, 125.0), "a day without an estimate is not a zero"
+    with pytest.raises(JournalError, match="поза межами"):
+        journal.save_food_estimate("2026-10-30", 0, 10)
+    with pytest.raises(JournalError, match="Немає нотатки"):
+        journal.save_food_estimate("2026-10-01", 2000, 100)
 
 
 def test_totals_of_nothing_have_no_averages(journal: Journal) -> None:

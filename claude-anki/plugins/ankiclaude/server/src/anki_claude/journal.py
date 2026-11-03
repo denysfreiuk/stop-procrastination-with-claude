@@ -1,8 +1,8 @@
 """The Obsidian journal: reading daily notes and the few changes Claude's commands make.
 
-Claude can read everything here, but in a daily note it can only append to `## Підсумок`
-and set `anki_done: true`, plus create a new weekly review and keep the page of words to
-study. So the vault's main rule, that the user's entries are never rewritten, holds in code.
+Claude can read everything here, but in a daily note it can only append to `## Підсумок`,
+set `anki_done: true` and its food estimate (`kcal`, `protein_g`), plus create a new weekly
+review and keep the page of words to study. So the vault's main rule, that the user's entries are never rewritten, holds in code.
 Metrics are computed here as well, not by the model. The Telegram bot has its own copy of
 the line helpers, because the plugin gets installed apart from the repository.
 
@@ -49,8 +49,10 @@ STUDY_PAGE_TEXT = """# Слова на вивчення
 WEEKDAYS = ("пн", "вт", "ср", "чт", "пт", "сб", "нд")
 WEEKLY_PROPERTIES = (
     "focus_minutes", "focus_blocks", "learning_days", "tiktok_free_days", "gym_days", "new_words",
-    "avg_sleep_hours",
+    "avg_sleep_hours", "avg_kcal", "avg_protein_g",
 )
+MAX_KCAL = 10000
+MAX_PROTEIN_G = 500
 
 KEY_LINE = re.compile(r"^([A-Za-z_][\w-]*):[ \t]*(.*?)[ \t]*$")
 LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+\.)\s+\S")
@@ -224,6 +226,9 @@ def totals(days: list[dict[str, Any]]) -> dict[str, Any]:
         "gym_days": sum(day["properties"].get("gym") is True for day in days),
         "new_words": total("new_words"),
         "avg_sleep_hours": average("sleep_hours"),
+        # Claude's estimates from «Їжа», only for the days /journal has looked at.
+        "avg_kcal": average("kcal"),
+        "avg_protein_g": average("protein_g"),
     }
 
 
@@ -357,6 +362,21 @@ class Journal:
             raise JournalError("Порожній підсумок.")
         self._update(path, lambda text: append_lines(text, SUMMARY, new_lines))
         return {"path": str(path), "lines_added": len(new_lines)}
+
+    def save_food_estimate(self, day_text: str, kcal: int, protein_g: int) -> dict[str, Any]:
+        """Claude's estimate of the day's food: the only numbers of a daily note Claude may set."""
+        day = parse_date(day_text)
+        path = self.note_path(day)
+        if not path.is_file():
+            raise JournalError(f"Немає нотатки за {day.isoformat()}.")
+        if not 0 < kcal <= MAX_KCAL or not 0 <= protein_g <= MAX_PROTEIN_G:
+            raise JournalError(f"Оцінка поза межами: до {MAX_KCAL} ккал і до {MAX_PROTEIN_G} г білка.")
+
+        def change(text: str) -> str:
+            return set_property(set_property(text, "kcal", str(kcal)), "protein_g", str(protein_g))
+
+        self._update(path, change)
+        return {"path": str(path), "kcal": kcal, "protein_g": protein_g}
 
     def mark_anki_done(self, days: Iterable[str]) -> dict[str, Any]:
         marked: list[str] = []

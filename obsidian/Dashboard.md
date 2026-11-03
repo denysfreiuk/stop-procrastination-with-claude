@@ -59,6 +59,8 @@ dv.table(["Показник", "7 днів", "30 днів"], [
   ["Нових слів", ...both((pages) => sum(pages, "new_words"))],
   ["Днів у залі", ...both((pages) => countDays(pages, (page) => page.gym === true))],
   ["Сон, год (середнє)", ...both((pages) => average(pages, "sleep_hours"))],
+  ["Ккал, оцінка (середнє)", ...both((pages) => average(pages, "kcal"))],
+  ["Білок, г, оцінка (середнє)", ...both((pages) => average(pages, "protein_g"))],
 ]);
 
 dv.header(2, "Останні 14 днів");
